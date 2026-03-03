@@ -298,6 +298,10 @@ The Google Doc ID is the long string in the URL: `https://docs.google.com/docume
 └── README.md
 ```
 
+## Built With
+
+100% vibe coded with [Claude](https://claude.ai/).
+
 ## License
 
 MIT
