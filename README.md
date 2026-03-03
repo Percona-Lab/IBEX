@@ -28,7 +28,7 @@ Each server runs independently — start only the ones you need.
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/perconalab/IBEX.git
+git clone https://github.com/Percona-Lab/IBEX.git
 cd IBEX
 npm install
 ```
