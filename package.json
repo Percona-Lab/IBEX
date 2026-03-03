@@ -1,7 +1,7 @@
 {
   "name": "ibex",
   "version": "1.0.0",
-  "description": "IBEX (Integration Bridge for EXternal systems) — MCP server connecting AI assistants to Slack, Notion, Jira, and persistent memory",
+  "description": "IBEX (Integration Bridge for EXtended systems) — MCP server connecting AI assistants to Slack, Notion, Jira, and persistent memory",
   "type": "module",
   "main": "server.js",
   "bin": {

@@ -1,6 +1,6 @@
 # IBEX
 
-**Integration Bridge for EXternal systems**
+**Integration Bridge for EXtended systems**
 
 A [Model Context Protocol](https://modelcontextprotocol.io/) server that connects AI assistants to your workplace tools — Slack, Notion, Jira, and a persistent GitHub-backed memory system.
 
