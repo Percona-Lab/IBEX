@@ -73,7 +73,7 @@ want to use. You can skip any connector you don't need.
               → New integration → Copy Internal Integration Secret
               → Then share pages with the integration via ··· → Connections
 
- JIRA         Jira domain, email, and API token
+ JIRA         Jira email and API token
               → https://id.atlassian.com/manage-profile/security/api-tokens
 
  SERVICENOW   ServiceNow instance URL, username, and password

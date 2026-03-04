@@ -161,8 +161,8 @@ configure_jira() {
   echo "  ${BOLD}Jira Setup${NC}"
   echo "  → https://id.atlassian.com/manage-profile/security/api-tokens"
   echo ""
-  JIRA_DOMAIN=$(prompt_value "Jira domain" "${JIRA_DOMAIN:-perconadev.atlassian.net}")
-  JIRA_EMAIL=$(prompt_value "Jira email" "${JIRA_EMAIL:-}")
+  JIRA_DOMAIN="perconadev.atlassian.net"
+  JIRA_EMAIL=$(prompt_value "Jira email (you@percona.com)" "${JIRA_EMAIL:-}")
   JIRA_API_TOKEN=$(prompt_secret "Jira API token" "${JIRA_API_TOKEN:-}")
 }
 
