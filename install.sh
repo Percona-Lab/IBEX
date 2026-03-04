@@ -93,7 +93,7 @@ want to use. You can skip any connector you don't need.
               → Percona internal LLM servers (requires VPN):
                 LM Studio: mac-studio-lm.int.percona.com
                 Ollama:    mac-studio-ollama.int.percona.com
-              → Request access from IT if you can't reach these
+              → Requires Percona VPN connection
               → Or use a local server (LM Studio, Ollama, etc.)
 
 You only need credentials for the connectors you plan to use.
@@ -433,10 +433,7 @@ setup_docker() {
         else
           printf " ${RED}not connected${NC}\n"
           printf "\n  ${RED}✗${NC} Cannot reach Percona LLM servers.\n"
-          printf "    1. Make sure you're connected to Percona VPN\n"
-          printf "    2. You may also need IT to grant network access — open a\n"
-          printf "       ticket at ${YELLOW}https://per.co.na/hd${NC} requesting access to\n"
-          printf "       mac-studio-lm.int.percona.com and mac-studio-ollama.int.percona.com\n"
+          printf "    Make sure you're connected to Percona VPN and try again.\n"
           printf "    Or choose a different LLM backend option below.\n\n"
           read -rp "  Press Enter to go back to LLM selection..."
           continue
@@ -472,10 +469,7 @@ setup_docker() {
         else
           printf " ${RED}not connected${NC}\n"
           printf "\n  ${RED}✗${NC} Cannot reach Percona LLM servers.\n"
-          printf "    1. Make sure you're connected to Percona VPN\n"
-          printf "    2. You may also need IT to grant network access — open a\n"
-          printf "       ticket at ${YELLOW}https://per.co.na/hd${NC} requesting access to\n"
-          printf "       mac-studio-lm.int.percona.com and mac-studio-ollama.int.percona.com\n"
+          printf "    Make sure you're connected to Percona VPN and try again.\n"
           printf "    Or choose a different LLM backend option below.\n\n"
           read -rp "  Press Enter to go back to LLM selection..."
           continue
