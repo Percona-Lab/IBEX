@@ -16,8 +16,11 @@ Designed to run alongside [Open WebUI](https://github.com/open-webui/open-webui)
 **Install IBEX** — open Terminal and paste:
 
 ```bash
-git clone https://github.com/Percona-Lab/IBEX.git ~/IBEX && ~/IBEX/install.sh
+brew install gh && gh auth login
+gh repo clone Percona-Lab/IBEX ~/IBEX && ~/IBEX/install.sh
 ```
+
+> This is a private repo. The first line installs [GitHub CLI](https://cli.github.com/) and logs you in (one-time setup). If you already have `gh` installed, skip to the second line.
 
 The installer walks you through everything. It will ask which connectors to set up — just skip any you don't need.
 
@@ -63,7 +66,7 @@ Each server runs independently — start only the ones you need.
 Run the interactive installer — it checks dependencies, collects credentials, sets up Docker, and starts everything:
 
 ```bash
-git clone https://github.com/Percona-Lab/IBEX.git ~/IBEX
+gh repo clone Percona-Lab/IBEX ~/IBEX
 ~/IBEX/install.sh
 ```
 
@@ -82,8 +85,8 @@ After installation:
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/Percona-Lab/IBEX.git
-cd IBEX
+gh repo clone Percona-Lab/IBEX ~/IBEX
+cd ~/IBEX
 npm install
 ```
 
