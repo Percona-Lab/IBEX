@@ -301,17 +301,20 @@ build_mcp_connections() {
 
   add_mcp() {
     local port=$1
+    local name=$2
+    local id=$3
+    local desc=$4
     [ "$first" = true ] || json+=","
-    json+="{\"url\":\"http://host.docker.internal:${port}/mcp\",\"path\":\"\",\"type\":\"mcp\",\"auth_type\":\"none\",\"key\":\"\",\"config\":{}}"
+    json+="{\"url\":\"http://host.docker.internal:${port}/mcp\",\"path\":\"\",\"type\":\"mcp\",\"auth_type\":\"none\",\"key\":\"\",\"config\":{},\"info\":{\"id\":\"${id}\",\"name\":\"${name}\",\"description\":\"${desc}\"}}"
     first=false
   }
 
-  [ -n "${SLACK_TOKEN:-}" ] && add_mcp 3001
-  [ -n "${NOTION_TOKEN:-}" ] && add_mcp 3002
-  [ -n "${JIRA_DOMAIN:-}" ] && [ -n "${JIRA_EMAIL:-}" ] && [ -n "${JIRA_API_TOKEN:-}" ] && add_mcp 3003
-  [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_OWNER:-}" ] && [ -n "${GITHUB_REPO:-}" ] && add_mcp 3004
-  [ -n "${SERVICENOW_INSTANCE:-}" ] && [ -n "${SERVICENOW_USERNAME:-}" ] && [ -n "${SERVICENOW_PASSWORD:-}" ] && add_mcp 3005
-  [ -n "${SALESFORCE_INSTANCE_URL:-}" ] && [ -n "${SALESFORCE_ACCESS_TOKEN:-}" ] && add_mcp 3006
+  [ -n "${SLACK_TOKEN:-}" ] && add_mcp 3001 "Slack" "slack" "Search messages, read channels, and browse threads"
+  [ -n "${NOTION_TOKEN:-}" ] && add_mcp 3002 "Notion" "notion" "Search pages, read content, and query databases"
+  [ -n "${JIRA_DOMAIN:-}" ] && [ -n "${JIRA_EMAIL:-}" ] && [ -n "${JIRA_API_TOKEN:-}" ] && add_mcp 3003 "Jira" "jira" "Search issues with JQL, read details and comments"
+  [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_OWNER:-}" ] && [ -n "${GITHUB_REPO:-}" ] && add_mcp 3004 "Memory" "memory" "Read and write persistent memory backed by GitHub"
+  [ -n "${SERVICENOW_INSTANCE:-}" ] && [ -n "${SERVICENOW_USERNAME:-}" ] && [ -n "${SERVICENOW_PASSWORD:-}" ] && add_mcp 3005 "ServiceNow" "servicenow" "Query tables, get records, and list tables"
+  [ -n "${SALESFORCE_INSTANCE_URL:-}" ] && [ -n "${SALESFORCE_ACCESS_TOKEN:-}" ] && add_mcp 3006 "Salesforce" "salesforce" "Run SOQL queries, get records, and search objects"
 
   json+="]"
   echo "$json"
