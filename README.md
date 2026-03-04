@@ -56,7 +56,7 @@ Each server runs independently — start only the ones you need.
 
 - [Node.js](https://nodejs.org/) >= 18
 - [Docker](https://www.docker.com/) (for Open WebUI)
-- A local LLM server ([LM Studio](https://lmstudio.ai/), [Ollama](https://ollama.ai/), etc.)
+- An LLM server — local ([LM Studio](https://lmstudio.ai/), [Ollama](https://ollama.ai/)) or hosted
 
 ## Quick Install (macOS)
 
