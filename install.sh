@@ -90,10 +90,11 @@ want to use. You can skip any connector you don't need.
               → Permissions: Contents → Read and write
 
  OPEN WEBUI   Requires Docker Desktop (will be installed if missing)
-              → Percona has an internally hosted LLM server (requires VPN)
-              → Request access from IT, or use a local server:
-              → LM Studio default: localhost:1234
-              → Ollama default: localhost:11434
+              → Percona internal LLM servers (requires VPN):
+                LM Studio: mac-studio-lm.int.percona.com
+                Ollama:    mac-studio-ollama.int.percona.com
+              → Request access from IT if you can't reach these
+              → Or use a local server (LM Studio, Ollama, etc.)
 
 You only need credentials for the connectors you plan to use.
 ============================================================
@@ -318,41 +319,100 @@ setup_docker() {
   # Only reach here if container doesn't exist or user chose to recreate
   if ! docker ps -a --format '{{.Names}}' | grep -q '^open-webui$'; then
     echo ""
-    echo "  Open WebUI needs to connect to your local LLM server."
-    echo "  Common defaults:"
-    echo "    LM Studio: localhost:1234"
-    echo "    Ollama:    localhost:11434"
+    echo "  Which LLM backend should Open WebUI connect to?"
+    echo ""
+    echo "    1) Percona internal servers (recommended — requires VPN)"
+    echo "       LM Studio + Ollama models on Percona network"
+    echo ""
+    echo "    2) Local LLM server (LM Studio, Ollama, etc. on this Mac)"
+    echo ""
+    echo "    3) Both — Percona internal + local server"
+    echo ""
+    echo "    4) Skip (configure later in Open WebUI → Settings → Connections)"
     echo ""
 
-    local llm_host
-    llm_host=$(prompt_value "LLM server address" "localhost")
+    printf "  Choose [1]: "
+    read backend_choice
+    backend_choice="${backend_choice:-1}"
 
-    local llm_port
-    llm_port=$(prompt_value "LLM server port" "1234")
+    local openai_url=""
+    local openai_key=""
+    local ollama_url=""
 
-    # Determine the API base URL
-    local api_base_url
-    if [ "$llm_host" = "localhost" ] || [ "$llm_host" = "127.0.0.1" ]; then
-      api_base_url="http://host.docker.internal:${llm_port}/v1"
-    else
-      api_base_url="http://${llm_host}:${llm_port}/v1"
-    fi
+    case "$backend_choice" in
+      1)
+        openai_url="https://mac-studio-lm.int.percona.com/v1"
+        openai_key="none"
+        ollama_url="https://mac-studio-ollama.int.percona.com"
+        echo ""
+        printf "  ${GREEN}✓${NC} Using Percona internal LLM servers\n"
+        printf "  ${YELLOW}!${NC} Make sure you're connected to Percona VPN\n"
+        ;;
+      2)
+        echo ""
+        local llm_host
+        llm_host=$(prompt_value "LLM server address" "localhost")
+        local llm_port
+        llm_port=$(prompt_value "LLM server port" "1234")
+
+        if [ "$llm_host" = "localhost" ] || [ "$llm_host" = "127.0.0.1" ]; then
+          openai_url="http://host.docker.internal:${llm_port}/v1"
+        else
+          openai_url="http://${llm_host}:${llm_port}/v1"
+        fi
+        openai_key="dummy"
+        ;;
+      3)
+        echo ""
+        local llm_host
+        llm_host=$(prompt_value "Local LLM server address" "localhost")
+        local llm_port
+        llm_port=$(prompt_value "Local LLM server port" "1234")
+
+        local local_url
+        if [ "$llm_host" = "localhost" ] || [ "$llm_host" = "127.0.0.1" ]; then
+          local_url="http://host.docker.internal:${llm_port}/v1"
+        else
+          local_url="http://${llm_host}:${llm_port}/v1"
+        fi
+
+        # Multiple OpenAI-compatible endpoints: semicolon-separated
+        openai_url="https://mac-studio-lm.int.percona.com/v1;${local_url}"
+        openai_key="none;dummy"
+        ollama_url="https://mac-studio-ollama.int.percona.com"
+        printf "\n  ${GREEN}✓${NC} Using Percona internal + local LLM servers\n"
+        printf "  ${YELLOW}!${NC} Percona servers require VPN connection\n"
+        ;;
+      4)
+        echo ""
+        printf "  ${YELLOW}·${NC} Skipping LLM backend configuration\n"
+        echo "  You can add connections later in Open WebUI → Settings → Connections"
+        ;;
+    esac
 
     echo ""
     echo "  Pulling Open WebUI image..."
     docker pull ghcr.io/open-webui/open-webui:main
 
     echo "  Creating container..."
-    docker run -d \
-      --name open-webui \
-      -p 8080:8080 \
-      -v ~/open-webui-data:/app/backend/data \
-      -e OPENAI_API_BASE_URL="$api_base_url" \
-      -e OPENAI_API_KEY=dummy \
-      ghcr.io/open-webui/open-webui:main
+    local docker_args="-d --name open-webui -p 8080:8080"
+    docker_args+=" -v $HOME/open-webui-data:/app/backend/data"
+
+    if [ -n "$openai_url" ]; then
+      docker_args+=" -e OPENAI_API_BASE_URLS=$openai_url"
+      docker_args+=" -e OPENAI_API_KEYS=$openai_key"
+    fi
+
+    if [ -n "$ollama_url" ]; then
+      docker_args+=" -e OLLAMA_BASE_URL=$ollama_url"
+    fi
+
+    docker run $docker_args ghcr.io/open-webui/open-webui:main
 
     printf "\n  ${GREEN}✓${NC} Open WebUI container created\n"
-    printf "  ${GREEN}✓${NC} LLM endpoint: %s\n" "$api_base_url"
+    if [ -n "$openai_url" ]; then
+      printf "  ${GREEN}✓${NC} LLM connections pre-configured\n"
+    fi
   fi
 
   echo ""
@@ -440,6 +500,7 @@ start_and_show() {
     echo ""
     echo " NEXT STEPS:"
     echo " 1. Open http://localhost:8080 and create your admin account"
+    echo "    (LLM connections are already configured!)"
     echo " 2. Go to Settings → Tools → MCP Servers"
     echo " 3. Add each server URL from the list above"
     echo "    (Use http://host.docker.internal:PORT/mcp as the URL)"

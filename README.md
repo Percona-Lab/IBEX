@@ -73,7 +73,7 @@ gh repo clone Percona-Lab/IBEX ~/IBEX
 The installer will:
 1. Install missing dependencies (Homebrew, Node.js, Git)
 2. Walk you through configuring each connector
-3. Set up Open WebUI with Docker
+3. Set up Open WebUI with Docker — pre-configured with Percona internal LLM servers
 4. Start all configured servers
 
 After installation:
@@ -181,15 +181,30 @@ curl http://localhost:3001/health
 
 ### Step 2: Start Open WebUI
 
-Open WebUI connects to your LLM server. Replace `<LLM_SERVER_IP>` with the IP of your LM Studio or Ollama server:
+Open WebUI connects to your LLM server. The installer pre-configures this, but for manual setup:
+
+**Percona internal servers (recommended — requires VPN):**
 
 ```bash
 docker run -d \
   --name open-webui \
   -p 8080:8080 \
   -v ~/open-webui-data:/app/backend/data \
-  -e OPENAI_API_BASE_URL=http://<LLM_SERVER_IP>:1234/v1 \
-  -e OPENAI_API_KEY=dummy \
+  -e OPENAI_API_BASE_URLS=https://mac-studio-lm.int.percona.com/v1 \
+  -e OPENAI_API_KEYS=none \
+  -e OLLAMA_BASE_URL=https://mac-studio-ollama.int.percona.com \
+  ghcr.io/open-webui/open-webui:main
+```
+
+**Local LLM server (LM Studio, Ollama, etc.):**
+
+```bash
+docker run -d \
+  --name open-webui \
+  -p 8080:8080 \
+  -v ~/open-webui-data:/app/backend/data \
+  -e OPENAI_API_BASE_URLS=http://host.docker.internal:1234/v1 \
+  -e OPENAI_API_KEYS=dummy \
   ghcr.io/open-webui/open-webui:main
 ```
 
