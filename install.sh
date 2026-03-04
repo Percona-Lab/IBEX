@@ -305,7 +305,7 @@ build_mcp_connections() {
     local id=$3
     local desc=$4
     [ "$first" = true ] || json+=","
-    json+="{\"url\":\"http://host.docker.internal:${port}/mcp\",\"path\":\"\",\"type\":\"mcp\",\"auth_type\":\"none\",\"key\":\"\",\"config\":{},\"info\":{\"id\":\"${id}\",\"name\":\"${name}\",\"description\":\"${desc}\"}}"
+    json+="{\"url\":\"http://host.docker.internal:${port}/mcp\",\"path\":\"\",\"type\":\"mcp\",\"auth_type\":\"none\",\"key\":\"\",\"config\":{\"enable\":true,\"access_grants\":[{\"principal_type\":\"user\",\"principal_id\":\"*\",\"permission\":\"read\"}]},\"info\":{\"id\":\"${id}\",\"name\":\"${name}\",\"description\":\"${desc}\"}}"
     first=false
   }
 
@@ -519,16 +519,172 @@ setup_docker() {
     fi
   fi
 
-  # Generate tailored system prompt based on configured connectors
-  local sys_prompt
-  sys_prompt=$(build_system_prompt)
-  echo -e "$sys_prompt" > "$HOME/.ibex-system-prompt.txt"
-  printf "  ${GREEN}✓${NC} System prompt saved to ~/.ibex-system-prompt.txt\n"
-
   echo ""
 }
 
-# ── Phase 6: Start Servers & Show Results ───────────────────
+# ── Phase 6: Configure Models via API ───────────────────────
+
+configure_models() {
+  if [ "${SKIP_DOCKER:-false}" = "true" ]; then
+    return
+  fi
+
+  echo ""
+  echo "============================================================"
+  echo " Configuring models..."
+  echo "============================================================"
+  echo ""
+
+  # Wait for Open WebUI to be ready
+  printf "  Waiting for Open WebUI to start..."
+  local retries=0
+  while ! curl -sf http://localhost:8080/api/version >/dev/null 2>&1; do
+    retries=$((retries + 1))
+    if [ $retries -ge 60 ]; then
+      printf "\n  ${RED}✗${NC} Open WebUI did not start in time\n"
+      printf "    Check: docker logs open-webui\n"
+      return
+    fi
+    sleep 2
+    printf "."
+  done
+  printf " ${GREEN}ready${NC}\n"
+
+  echo ""
+  echo "  Open http://localhost:8080 and create your admin account."
+  echo "  Come back here when you're done."
+  echo ""
+  read -rp "  Press Enter after creating your account..."
+  echo ""
+
+  # Get credentials
+  local email password
+  read -rp "  Enter your Open WebUI email: " email
+  read -rsp "  Enter your Open WebUI password: " password
+  echo ""
+
+  # Authenticate
+  local auth_response token
+  auth_response=$(curl -sf -X POST http://localhost:8080/api/v1/auths/signin \
+    -H "Content-Type: application/json" \
+    -d "{\"email\":\"${email}\",\"password\":\"${password}\"}" 2>/dev/null)
+
+  if [ -z "$auth_response" ]; then
+    printf "\n  ${RED}✗${NC} Could not sign in — check your email and password\n"
+    printf "    You can configure models manually in Settings.\n"
+    return
+  fi
+
+  token=$(echo "$auth_response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+
+  if [ -z "$token" ]; then
+    printf "\n  ${RED}✗${NC} Could not get auth token\n"
+    return
+  fi
+
+  printf "  ${GREEN}✓${NC} Signed in\n"
+
+  # Build system prompt and save to temp file for Python to read
+  local sys_prompt
+  sys_prompt=$(build_system_prompt)
+  local prompt_file
+  prompt_file=$(mktemp)
+  echo -e "$sys_prompt" > "$prompt_file"
+
+  # Get list of available tools
+  local tools_response tool_ids
+  tools_response=$(curl -sf http://localhost:8080/api/v1/tools/ \
+    -H "Authorization: Bearer $token" 2>/dev/null)
+
+  tool_ids=$(echo "$tools_response" | python3 -c "
+import sys, json
+tools = json.load(sys.stdin)
+ids = [t['id'] for t in tools if t.get('id')]
+print(json.dumps(ids))
+" 2>/dev/null || echo "[]")
+
+  if [ "$tool_ids" = "[]" ]; then
+    printf "  ${YELLOW}!${NC} No tools discovered yet — servers may still be loading\n"
+    printf "    You can assign tools manually in Settings → Models.\n"
+  else
+    local tool_count
+    tool_count=$(echo "$tool_ids" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null)
+    printf "  ${GREEN}✓${NC} Found %s tool(s)\n" "$tool_count"
+  fi
+
+  # Get list of models
+  local models_response
+  models_response=$(curl -sf http://localhost:8080/api/v1/models/ \
+    -H "Authorization: Bearer $token" 2>/dev/null)
+
+  if [ -z "$models_response" ]; then
+    printf "  ${YELLOW}!${NC} No models found — configure LLM connections first\n"
+    rm -f "$prompt_file"
+    return
+  fi
+
+  # Use Python to update each model with system prompt and tools
+  echo "$models_response" | python3 -c "
+import sys, json, urllib.request
+
+token = sys.argv[1]
+tool_ids = json.loads(sys.argv[2])
+prompt_file = sys.argv[3]
+
+with open(prompt_file) as f:
+    sys_prompt = f.read().strip()
+
+models = json.load(sys.stdin)
+
+for m in models:
+    mid = m.get('id', '')
+    name = m.get('name', mid)
+    base = m.get('base_model_id') or mid
+
+    update = {
+        'id': mid,
+        'name': name,
+        'base_model_id': base,
+        'is_active': m.get('is_active', True),
+        'params': m.get('params', {}),
+        'meta': m.get('meta', {}),
+    }
+    update['params']['system'] = sys_prompt
+    if tool_ids:
+        update['meta']['toolIds'] = tool_ids
+
+    payload = json.dumps(update).encode()
+    req = urllib.request.Request(
+        'http://localhost:8080/api/v1/models/model/update',
+        data=payload,
+        headers={
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json',
+        },
+        method='POST',
+    )
+    try:
+        urllib.request.urlopen(req)
+        print(f'ok:{name}')
+    except Exception as e:
+        print(f'fail:{name}:{e}')
+" "$token" "$tool_ids" "$prompt_file" 2>/dev/null | while IFS= read -r line; do
+    case "$line" in
+      ok:*)
+        printf "  ${GREEN}✓${NC} Configured model: %s\n" "${line#ok:}"
+        ;;
+      fail:*)
+        printf "  ${RED}✗${NC} Failed to configure: %s\n" "${line#fail:}"
+        ;;
+    esac
+  done
+
+  rm -f "$prompt_file"
+  printf "\n  ${GREEN}✓${NC} System prompt and tools applied to all models\n"
+  printf "  ${YELLOW}!${NC} Refresh Open WebUI in your browser to see the changes\n"
+}
+
+# ── Phase 7: Start Servers & Show Results ───────────────────
 
 start_and_show() {
   echo "============================================================"
@@ -598,25 +754,22 @@ start_and_show() {
   sleep 2
 
   echo ""
+  echo "  $started server(s) started."
+
+  # Configure models with system prompt and tools
+  configure_models
+
+  echo ""
   echo "============================================================"
   echo " IBEX Installation Complete!"
   echo "============================================================"
   echo ""
-  echo " $started server(s) started."
-  echo ""
 
   if [ "${SKIP_DOCKER:-false}" != "true" ]; then
     echo " Open WebUI → http://localhost:8080"
+    echo " System prompt and tools have been applied to all models."
     echo ""
-    echo " NEXT STEPS:"
-    echo " 1. Open http://localhost:8080 and create your admin account"
-    echo "    LLM models and MCP tools are already configured!"
-    echo " 2. Go to Settings → Models → (select your model) → System Prompt"
-    echo "    and paste the contents of ~/.ibex-system-prompt.txt"
-    echo " 3. Start a chat and ask it to use your tools"
-    echo ""
-    echo " If tools don't appear, go to Settings → External Tools"
-    echo " and verify the MCP servers are listed and enabled."
+    echo " Start a chat and ask it to use your tools!"
   else
     echo " Install Docker Desktop to use Open WebUI:"
     echo "   https://www.docker.com/products/docker-desktop/"
@@ -628,20 +781,10 @@ start_and_show() {
   echo "   ~/IBEX/configure.sh     Add or update connectors"
   echo ""
   echo " FILES:"
-  echo "   ~/.ibex-mcp.env              Credentials (chmod 600)"
-  echo "   ~/.ibex-system-prompt.txt    System prompt for Open WebUI"
-  echo "   ~/IBEX/                      Installation directory"
+  echo "   ~/.ibex-mcp.env         Credentials (chmod 600)"
+  echo "   ~/IBEX/                 Installation directory"
   echo ""
   echo "============================================================"
-  echo ""
-
-  # Print the generated system prompt for easy copying
-  if [ -f "$HOME/.ibex-system-prompt.txt" ]; then
-    echo " SYSTEM PROMPT (paste into Settings → Models → System Prompt):"
-    echo " ────────────────────────────────────────────────────────────"
-    sed 's/^/  /' "$HOME/.ibex-system-prompt.txt"
-    echo " ────────────────────────────────────────────────────────────"
-  fi
   echo ""
 
   if [ $started -gt 0 ]; then
