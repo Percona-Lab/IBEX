@@ -54,12 +54,9 @@ Each server runs independently — start only the ones you need.
 
 ## System Prompt
 
-The installer automatically generates a tailored system prompt at `~/.ibex-system-prompt.txt` based on which connectors you configured. After creating your Open WebUI admin account:
+The installer automatically generates a tailored system prompt based on which connectors you configured and sets it at the user level in Open WebUI (applies to all models). It's also saved to `~/.ibex-system-prompt.txt` for reference.
 
-1. Go to **Settings → Models → (select your model) → System Prompt**
-2. Paste the contents of `~/.ibex-system-prompt.txt`
-
-This tells the model which tools are available and how to use them (especially the memory tools).
+If you need to set it manually: go to **Settings → General → System Prompt** and paste the contents of `~/.ibex-system-prompt.txt`.
 
 ## Manual Setup
 

@@ -652,16 +652,52 @@ print(json.dumps(ids))
     return
   fi
 
-  # Use Python to update each model with system prompt and tools
-  echo "$models_response" | python3 -c "
+  # Set system prompt at user level (applies to all models)
+  python3 -c "
+import sys, json, urllib.request
+
+token = sys.argv[1]
+prompt_file = sys.argv[2]
+
+with open(prompt_file) as f:
+    sys_prompt = f.read().strip()
+
+# Get current user settings to avoid overwriting other fields
+try:
+    req = urllib.request.Request(
+        'http://localhost:8080/api/v1/users/user/settings',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    resp = urllib.request.urlopen(req)
+    settings = json.loads(resp.read())
+except Exception:
+    settings = {}
+
+settings['system'] = sys_prompt
+
+payload = json.dumps(settings).encode()
+req = urllib.request.Request(
+    'http://localhost:8080/api/v1/users/user/settings/update',
+    data=payload,
+    headers={
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json',
+    },
+    method='POST',
+)
+urllib.request.urlopen(req)
+print('ok')
+" "$token" "$prompt_file" 2>/dev/null | grep -q "ok" && \
+    printf "  ${GREEN}✓${NC} System prompt set (user-level, applies to all models)\n" || \
+    printf "  ${RED}✗${NC} Failed to set system prompt\n"
+
+  # Assign tools to each model
+  if [ "$tool_ids" != "[]" ]; then
+    echo "$models_response" | python3 -c "
 import sys, json, urllib.request
 
 token = sys.argv[1]
 tool_ids = json.loads(sys.argv[2])
-prompt_file = sys.argv[3]
-
-with open(prompt_file) as f:
-    sys_prompt = f.read().strip()
 
 models = json.load(sys.stdin)
 
@@ -678,9 +714,7 @@ for m in models:
         'params': m.get('params', {}),
         'meta': m.get('meta', {}),
     }
-    update['params']['system'] = sys_prompt
-    if tool_ids:
-        update['meta']['toolIds'] = tool_ids
+    update['meta']['toolIds'] = tool_ids
 
     payload = json.dumps(update).encode()
     req = urllib.request.Request(
@@ -697,19 +731,20 @@ for m in models:
         print(f'ok:{name}')
     except Exception as e:
         print(f'fail:{name}:{e}')
-" "$token" "$tool_ids" "$prompt_file" 2>/dev/null | while IFS= read -r line; do
-    case "$line" in
-      ok:*)
-        printf "  ${GREEN}✓${NC} Configured model: %s\n" "${line#ok:}"
-        ;;
-      fail:*)
-        printf "  ${RED}✗${NC} Failed to configure: %s\n" "${line#fail:}"
-        ;;
-    esac
-  done
+" "$token" "$tool_ids" 2>/dev/null | while IFS= read -r line; do
+      case "$line" in
+        ok:*)
+          printf "  ${GREEN}✓${NC} Tools assigned to: %s\n" "${line#ok:}"
+          ;;
+        fail:*)
+          printf "  ${RED}✗${NC} Failed to assign tools: %s\n" "${line#fail:}"
+          ;;
+      esac
+    done
+  fi
 
   rm -f "$prompt_file"
-  printf "\n  ${GREEN}✓${NC} System prompt and tools applied to all models\n"
+  printf "\n  ${GREEN}✓${NC} Configuration complete\n"
   printf "  ${YELLOW}!${NC} Refresh Open WebUI in your browser to see the changes\n"
 }
 
@@ -796,7 +831,7 @@ start_and_show() {
 
   if [ "${SKIP_DOCKER:-false}" != "true" ]; then
     echo " Open WebUI → http://localhost:8080"
-    echo " System prompt and tools have been applied to all models."
+    echo " System prompt and tools have been configured."
     echo ""
     echo " Start a chat and ask it to use your tools!"
   else
