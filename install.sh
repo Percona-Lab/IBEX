@@ -353,8 +353,9 @@ build_system_prompt() {
     prompt+="\n"
     prompt+="\nMemory usage:"
     prompt+="\n- Use memory_get when the user references previous context, asks \"what do you know\", or needs background on a project"
-    prompt+="\n- Use memory_update when the user says \"remember this\" or shares important context for future sessions"
+    prompt+="\n- Use memory_update when the user says \"remember this\", \"save this\", or asks you to store any information — this is the user's personal memory and they decide what goes in it"
     prompt+="\n- Always call memory_get first, merge new info into existing content, then call memory_update with the complete updated markdown"
+    prompt+="\n- Keep memory organized with ## headings and bullet points"
     prompt+="\n- Do not call memory_get at the start of every conversation — only when context is needed"
   fi
 
