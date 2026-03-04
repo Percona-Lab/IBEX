@@ -402,6 +402,12 @@ setup_docker() {
   # Only reach here if container doesn't exist or user chose to recreate
   if ! docker ps -a --format '{{.Names}}' | grep -q '^open-webui$'; then
     echo ""
+    local openai_url=""
+    local openai_key=""
+    local ollama_url=""
+    local default_model=""
+
+    while true; do
     echo "  Which LLM backend should Open WebUI connect to?"
     echo ""
     echo "    1) Percona internal servers (recommended — requires VPN)"
@@ -418,21 +424,27 @@ setup_docker() {
     read backend_choice
     backend_choice="${backend_choice:-1}"
 
-    local openai_url=""
-    local openai_key=""
-    local ollama_url=""
-    local default_model=""
-
     case "$backend_choice" in
       1)
+        echo ""
+        printf "  Checking VPN connection..."
+        if curl -sf --connect-timeout 5 "$PERCONA_LM_URL/models" >/dev/null 2>&1; then
+          printf " ${GREEN}connected${NC}\n"
+        else
+          printf " ${RED}not connected${NC}\n"
+          printf "\n  ${RED}✗${NC} Cannot reach Percona LLM servers.\n"
+          printf "    Connect to Percona VPN and re-run the installer.\n"
+          printf "    Or choose a different LLM backend option.\n\n"
+          read -rp "  Press Enter to go back to LLM selection..."
+          continue
+        fi
         openai_url="$PERCONA_LM_URL"
         openai_key="none"
         ollama_url="$PERCONA_OLLAMA_URL"
         default_model="$PERCONA_DEFAULT_MODEL"
-        echo ""
         printf "  ${GREEN}✓${NC} Using Percona internal LLM servers\n"
         printf "  ${GREEN}✓${NC} Default model: %s\n" "$default_model"
-        printf "  ${YELLOW}!${NC} Make sure you're connected to Percona VPN\n"
+        break
         ;;
       2)
         echo ""
@@ -447,8 +459,22 @@ setup_docker() {
           openai_url="http://${llm_host}:${llm_port}/v1"
         fi
         openai_key="dummy"
+        break
         ;;
       3)
+        echo ""
+        printf "  Checking VPN connection..."
+        if curl -sf --connect-timeout 5 "$PERCONA_LM_URL/models" >/dev/null 2>&1; then
+          printf " ${GREEN}connected${NC}\n"
+        else
+          printf " ${RED}not connected${NC}\n"
+          printf "\n  ${RED}✗${NC} Cannot reach Percona LLM servers.\n"
+          printf "    Connect to Percona VPN and re-run the installer.\n"
+          printf "    Or choose a different LLM backend option.\n\n"
+          read -rp "  Press Enter to go back to LLM selection..."
+          continue
+        fi
+
         echo ""
         local llm_host
         llm_host=$(prompt_value "Local LLM server address" "localhost")
@@ -469,14 +495,16 @@ setup_docker() {
         default_model="$PERCONA_DEFAULT_MODEL"
         printf "\n  ${GREEN}✓${NC} Using Percona internal + local LLM servers\n"
         printf "  ${GREEN}✓${NC} Default model: %s\n" "$default_model"
-        printf "  ${YELLOW}!${NC} Percona servers require VPN connection\n"
+        break
         ;;
       4)
         echo ""
         printf "  ${YELLOW}·${NC} Skipping LLM backend configuration\n"
         echo "  You can add connections later in Open WebUI → Settings → Connections"
+        break
         ;;
     esac
+    done
 
     # Build MCP tool server connections from configured credentials
     local mcp_json
