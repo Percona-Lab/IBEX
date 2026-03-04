@@ -281,6 +281,41 @@ configure_credentials() {
 
 # ── Phase 5: Open WebUI Docker Setup ───────────────────────
 
+# Percona internal LLM server addresses (requires VPN)
+PERCONA_LM_URL="https://mac-studio-lm.int.percona.com/v1"
+PERCONA_OLLAMA_URL="https://mac-studio-ollama.int.percona.com"
+
+build_mcp_connections() {
+  # Build TOOL_SERVER_CONNECTIONS JSON from configured credentials
+  # Sources ~/.ibex-mcp.env to check what's configured
+
+  if [ -f "$HOME/.ibex-mcp.env" ]; then
+    set -a
+    source "$HOME/.ibex-mcp.env"
+    set +a
+  fi
+
+  local json="["
+  local first=true
+
+  add_mcp() {
+    local port=$1
+    [ "$first" = true ] || json+=","
+    json+="{\"url\":\"http://host.docker.internal:${port}/mcp\",\"path\":\"\",\"type\":\"mcp\",\"auth_type\":\"none\",\"key\":\"\",\"config\":{}}"
+    first=false
+  }
+
+  [ -n "${SLACK_TOKEN:-}" ] && add_mcp 3001
+  [ -n "${NOTION_TOKEN:-}" ] && add_mcp 3002
+  [ -n "${JIRA_DOMAIN:-}" ] && [ -n "${JIRA_EMAIL:-}" ] && [ -n "${JIRA_API_TOKEN:-}" ] && add_mcp 3003
+  [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_OWNER:-}" ] && [ -n "${GITHUB_REPO:-}" ] && add_mcp 3004
+  [ -n "${SERVICENOW_INSTANCE:-}" ] && [ -n "${SERVICENOW_USERNAME:-}" ] && [ -n "${SERVICENOW_PASSWORD:-}" ] && add_mcp 3005
+  [ -n "${SALESFORCE_INSTANCE_URL:-}" ] && [ -n "${SALESFORCE_ACCESS_TOKEN:-}" ] && add_mcp 3006
+
+  json+="]"
+  echo "$json"
+}
+
 setup_docker() {
   if [ "${SKIP_DOCKER:-false}" = "true" ]; then
     echo "============================================================"
@@ -341,9 +376,9 @@ setup_docker() {
 
     case "$backend_choice" in
       1)
-        openai_url="https://mac-studio-lm.int.percona.com/v1"
+        openai_url="$PERCONA_LM_URL"
         openai_key="none"
-        ollama_url="https://mac-studio-ollama.int.percona.com"
+        ollama_url="$PERCONA_OLLAMA_URL"
         echo ""
         printf "  ${GREEN}✓${NC} Using Percona internal LLM servers\n"
         printf "  ${YELLOW}!${NC} Make sure you're connected to Percona VPN\n"
@@ -377,9 +412,9 @@ setup_docker() {
         fi
 
         # Multiple OpenAI-compatible endpoints: semicolon-separated
-        openai_url="https://mac-studio-lm.int.percona.com/v1;${local_url}"
+        openai_url="${PERCONA_LM_URL};${local_url}"
         openai_key="none;dummy"
-        ollama_url="https://mac-studio-ollama.int.percona.com"
+        ollama_url="$PERCONA_OLLAMA_URL"
         printf "\n  ${GREEN}✓${NC} Using Percona internal + local LLM servers\n"
         printf "  ${YELLOW}!${NC} Percona servers require VPN connection\n"
         ;;
@@ -390,28 +425,40 @@ setup_docker() {
         ;;
     esac
 
+    # Build MCP tool server connections from configured credentials
+    local mcp_json
+    mcp_json=$(build_mcp_connections)
+
     echo ""
     echo "  Pulling Open WebUI image..."
     docker pull ghcr.io/open-webui/open-webui:main
 
     echo "  Creating container..."
-    local docker_args="-d --name open-webui -p 8080:8080"
-    docker_args+=" -v $HOME/open-webui-data:/app/backend/data"
+    local -a docker_cmd=(docker run -d --name open-webui -p 8080:8080)
+    docker_cmd+=(-v "$HOME/open-webui-data:/app/backend/data")
 
     if [ -n "$openai_url" ]; then
-      docker_args+=" -e OPENAI_API_BASE_URLS=$openai_url"
-      docker_args+=" -e OPENAI_API_KEYS=$openai_key"
+      docker_cmd+=(-e "OPENAI_API_BASE_URLS=$openai_url")
+      docker_cmd+=(-e "OPENAI_API_KEYS=$openai_key")
     fi
 
     if [ -n "$ollama_url" ]; then
-      docker_args+=" -e OLLAMA_BASE_URL=$ollama_url"
+      docker_cmd+=(-e "OLLAMA_BASE_URL=$ollama_url")
     fi
 
-    docker run $docker_args ghcr.io/open-webui/open-webui:main
+    if [ "$mcp_json" != "[]" ]; then
+      docker_cmd+=(-e "TOOL_SERVER_CONNECTIONS=$mcp_json")
+    fi
+
+    docker_cmd+=(ghcr.io/open-webui/open-webui:main)
+    "${docker_cmd[@]}"
 
     printf "\n  ${GREEN}✓${NC} Open WebUI container created\n"
     if [ -n "$openai_url" ]; then
       printf "  ${GREEN}✓${NC} LLM connections pre-configured\n"
+    fi
+    if [ "$mcp_json" != "[]" ]; then
+      printf "  ${GREEN}✓${NC} MCP tool servers pre-configured\n"
     fi
   fi
 
@@ -500,11 +547,11 @@ start_and_show() {
     echo ""
     echo " NEXT STEPS:"
     echo " 1. Open http://localhost:8080 and create your admin account"
-    echo "    (LLM connections are already configured!)"
-    echo " 2. Go to Settings → Tools → MCP Servers"
-    echo " 3. Add each server URL from the list above"
-    echo "    (Use http://host.docker.internal:PORT/mcp as the URL)"
-    echo " 4. Set Auth to \"None\" for all servers"
+    echo "    LLM models and MCP tools are already configured!"
+    echo " 2. Start a chat, pick a model, and ask it to use your tools"
+    echo ""
+    echo " If tools don't appear, go to Settings → External Tools"
+    echo " and verify the MCP servers are listed and enabled."
   else
     echo " Install Docker Desktop to use Open WebUI:"
     echo "   https://www.docker.com/products/docker-desktop/"

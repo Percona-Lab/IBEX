@@ -212,20 +212,19 @@ Open http://localhost:8080 and create your admin account on first launch.
 
 ### Step 3: Connect MCP servers to Open WebUI
 
-1. In Open WebUI, go to **Settings → Tools → MCP Servers**
-2. Add each server you started:
+The installer pre-configures MCP tool servers automatically via the `TOOL_SERVER_CONNECTIONS` environment variable. If you need to add them manually:
 
-| Server | Type | URL |
-|--------|------|-----|
-| Slack | Streamable HTTP | `http://host.docker.internal:3001/mcp` |
-| Notion | Streamable HTTP | `http://host.docker.internal:3002/mcp` |
-| Jira | Streamable HTTP | `http://host.docker.internal:3003/mcp` |
-| Memory | Streamable HTTP | `http://host.docker.internal:3004/mcp` |
-| ServiceNow | Streamable HTTP | `http://host.docker.internal:3005/mcp` |
-| Salesforce | Streamable HTTP | `http://host.docker.internal:3006/mcp` |
+1. In Open WebUI, go to **Settings → External Tools**
+2. Add each server — set Type to **MCP (Streamable HTTP)**, Auth to **None**:
 
-3. Auth: None for all servers
-4. Toggle on/off individual servers per conversation as needed
+| Server | URL |
+|--------|-----|
+| Slack | `http://host.docker.internal:3001/mcp` |
+| Notion | `http://host.docker.internal:3002/mcp` |
+| Jira | `http://host.docker.internal:3003/mcp` |
+| Memory | `http://host.docker.internal:3004/mcp` |
+| ServiceNow | `http://host.docker.internal:3005/mcp` |
+| Salesforce | `http://host.docker.internal:3006/mcp` |
 
 ### All-in-one mode
 
