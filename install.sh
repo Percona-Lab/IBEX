@@ -317,6 +317,50 @@ build_mcp_connections() {
   echo "$json"
 }
 
+build_system_prompt() {
+  # Build a system prompt tailored to configured connectors
+  # Sources ~/.ibex-mcp.env to check what's configured
+
+  if [ -f "$HOME/.ibex-mcp.env" ]; then
+    set -a
+    source "$HOME/.ibex-mcp.env"
+    set +a
+  fi
+
+  local prompt="You have access to workplace tools via IBEX:"
+  prompt+="\n"
+
+  [ -n "${SLACK_TOKEN:-}" ] && \
+    prompt+="\n- Slack: search messages, read channels, list channels, read threads"
+
+  [ -n "${NOTION_TOKEN:-}" ] && \
+    prompt+="\n- Notion: search pages, read content, query databases"
+
+  [ -n "${JIRA_DOMAIN:-}" ] && [ -n "${JIRA_EMAIL:-}" ] && [ -n "${JIRA_API_TOKEN:-}" ] && \
+    prompt+="\n- Jira: search issues with JQL, read issue details and comments, list projects"
+
+  [ -n "${SERVICENOW_INSTANCE:-}" ] && [ -n "${SERVICENOW_USERNAME:-}" ] && [ -n "${SERVICENOW_PASSWORD:-}" ] && \
+    prompt+="\n- ServiceNow: query tables, get records, list tables"
+
+  [ -n "${SALESFORCE_INSTANCE_URL:-}" ] && [ -n "${SALESFORCE_ACCESS_TOKEN:-}" ] && \
+    prompt+="\n- Salesforce: run SOQL queries, get records, search across objects, describe schemas"
+
+  if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_OWNER:-}" ] && [ -n "${GITHUB_REPO:-}" ]; then
+    prompt+="\n- Memory: read/write persistent memory (GitHub-backed)"
+    prompt+="\n"
+    prompt+="\nMemory usage:"
+    prompt+="\n- Use memory_get when the user references previous context, asks \"what do you know\", or needs background on a project"
+    prompt+="\n- Use memory_update when the user says \"remember this\" or shares important context for future sessions"
+    prompt+="\n- Always call memory_get first, merge new info into existing content, then call memory_update with the complete updated markdown"
+    prompt+="\n- Do not call memory_get at the start of every conversation — only when context is needed"
+  fi
+
+  prompt+="\n"
+  prompt+="\nUse the tools above when the user asks questions about their work data. If the user asks about a system not listed here, let them know that connector is not configured."
+
+  echo -e "$prompt"
+}
+
 setup_docker() {
   if [ "${SKIP_DOCKER:-false}" = "true" ]; then
     echo "============================================================"
@@ -472,6 +516,12 @@ setup_docker() {
     fi
   fi
 
+  # Generate tailored system prompt based on configured connectors
+  local sys_prompt
+  sys_prompt=$(build_system_prompt)
+  echo -e "$sys_prompt" > "$HOME/.ibex-system-prompt.txt"
+  printf "  ${GREEN}✓${NC} System prompt saved to ~/.ibex-system-prompt.txt\n"
+
   echo ""
 }
 
@@ -558,7 +608,9 @@ start_and_show() {
     echo " NEXT STEPS:"
     echo " 1. Open http://localhost:8080 and create your admin account"
     echo "    LLM models and MCP tools are already configured!"
-    echo " 2. Start a chat, pick a model, and ask it to use your tools"
+    echo " 2. Go to Settings → Models → (select your model) → System Prompt"
+    echo "    and paste the contents of ~/.ibex-system-prompt.txt"
+    echo " 3. Start a chat and ask it to use your tools"
     echo ""
     echo " If tools don't appear, go to Settings → External Tools"
     echo " and verify the MCP servers are listed and enabled."
@@ -573,10 +625,20 @@ start_and_show() {
   echo "   ~/IBEX/configure.sh     Add or update connectors"
   echo ""
   echo " FILES:"
-  echo "   ~/.ibex-mcp.env         Credentials (chmod 600)"
-  echo "   ~/IBEX/                 Installation directory"
+  echo "   ~/.ibex-mcp.env              Credentials (chmod 600)"
+  echo "   ~/.ibex-system-prompt.txt    System prompt for Open WebUI"
+  echo "   ~/IBEX/                      Installation directory"
   echo ""
   echo "============================================================"
+  echo ""
+
+  # Print the generated system prompt for easy copying
+  if [ -f "$HOME/.ibex-system-prompt.txt" ]; then
+    echo " SYSTEM PROMPT (paste into Settings → Models → System Prompt):"
+    echo " ────────────────────────────────────────────────────────────"
+    sed 's/^/  /' "$HOME/.ibex-system-prompt.txt"
+    echo " ────────────────────────────────────────────────────────────"
+  fi
   echo ""
 
   if [ $started -gt 0 ]; then
