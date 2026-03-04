@@ -4,41 +4,30 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io/) server that connects AI assistants to your workplace tools — Slack, Notion, Jira, ServiceNow, Salesforce, and a persistent GitHub-backed memory system.
 
-Designed to run alongside [Open WebUI](https://github.com/open-webui/open-webui) and a local LLM server (LM Studio, Ollama, etc.) for a fully self-hosted AI assistant with access to your internal tools.
+Designed to run alongside [Open WebUI](https://github.com/open-webui/open-webui) and any OpenAI-compatible LLM server ([LM Studio](https://lmstudio.ai/), [Ollama](https://ollama.ai/), hosted endpoints, etc.) for a self-hosted AI assistant with access to your internal tools.
 
-## Get Started (Mac)
+## Quick Start (macOS)
 
-**What you need first:**
-1. [Docker Desktop](https://www.docker.com/products/docker-desktop/) — install and open it
-2. An LLM server — Percona has an internally hosted server on the corporate network (request access from IT, requires VPN). Or use a local server like [LM Studio](https://lmstudio.ai/)
-3. API credentials for the tools you want to connect (Slack, Notion, Jira, etc.)
-
-**Install IBEX** — open Terminal and paste:
+Open Terminal and paste:
 
 ```bash
 brew install gh && gh auth login
-gh repo clone Percona-Lab/IBEX ~/IBEX && ~/IBEX/install.sh
+[ -d ~/IBEX ] || gh repo clone Percona-Lab/IBEX ~/IBEX && ~/IBEX/install.sh
 ```
 
-> The first line installs [GitHub CLI](https://cli.github.com/) and logs you into GitHub (one-time). If you already have `gh`, skip to the second line.
+The first line installs [GitHub CLI](https://cli.github.com/) and logs you into GitHub (one-time). The second line clones the repo and runs the installer.
 
-The installer walks you through everything. It will ask which connectors to set up — just skip any you don't need.
+The installer handles everything — it installs missing dependencies (Homebrew, Node.js, Docker), walks you through connector credentials, sets up Open WebUI, and registers the MCP tool servers. Skip any connector you don't need.
 
-**Next time you want to start it:**
+> Already installed? Run `~/IBEX/update.sh` to update Open WebUI and IBEX. The install command above is also safe to re-run — the clone is skipped if `~/IBEX` exists.
 
-```bash
-~/IBEX/start.sh
-```
+**Day-to-day commands:**
 
-Then open [http://localhost:8080](http://localhost:8080) in your browser.
-
-**Want to add a connector later?**
-
-```bash
-~/IBEX/configure.sh
-```
-
----
+| Command | What it does |
+|---------|--------------|
+| `~/IBEX/start.sh` | Start MCP servers + Open WebUI, then open http://localhost:8080 |
+| `~/IBEX/configure.sh` | Add or update connector credentials |
+| `~/IBEX/update.sh` | Update Open WebUI and IBEX to the latest versions |
 
 ## Features
 
@@ -53,52 +42,40 @@ Then open [http://localhost:8080](http://localhost:8080) in your browser.
 
 Each server runs independently — start only the ones you need.
 
-> **Note:** If you already use [PACK](https://github.com/Percona-Lab/PACK), the Memory connector shares the same GitHub-backed memory system. You do not need to configure it again in IBEX — your existing credentials and repo will work.
+## How It Works
 
-## Prerequisites
+1. **`install.sh`** checks for dependencies (Homebrew, Node.js, Docker), installs anything missing, walks you through connector credentials, sets up Open WebUI in Docker with your LLM server pre-configured, and registers all MCP tool servers automatically.
 
-- [Node.js](https://nodejs.org/) >= 18
-- [Docker](https://www.docker.com/) (for Open WebUI)
-- An LLM server — local ([LM Studio](https://lmstudio.ai/), [Ollama](https://ollama.ai/)) or hosted
+2. **`start.sh`** reads `~/.ibex-mcp.env` and only launches servers whose credentials are configured. It also starts the Open WebUI Docker container. Press `Ctrl+C` to stop all servers.
 
-## Quick Install (macOS)
+3. **`update.sh`** pulls the latest IBEX code (if installed via git) and updates the Open WebUI Docker container to the latest version. Your data, settings, and accounts are preserved.
 
-Run the interactive installer — it checks dependencies, collects credentials, sets up Docker, and starts everything:
+4. **`configure.sh`** lets you add or change connector credentials at any time. Run `~/IBEX/start.sh` afterwards to apply changes.
 
-```bash
-gh repo clone Percona-Lab/IBEX ~/IBEX
-~/IBEX/install.sh
-```
+## System Prompt
 
-The installer will:
-1. Install missing dependencies (Homebrew, Node.js, Git)
-2. Walk you through configuring each connector
-3. Set up Open WebUI with Docker — pre-configured with Percona internal LLM servers
-4. Start all configured servers
+The installer automatically generates a tailored system prompt at `~/.ibex-system-prompt.txt` based on which connectors you configured. After creating your Open WebUI admin account:
 
-After installation:
-- **Start servers**: `~/IBEX/start.sh`
-- **Add/update connectors**: `~/IBEX/configure.sh`
+1. Go to **Settings → Models → (select your model) → System Prompt**
+2. Paste the contents of `~/.ibex-system-prompt.txt`
+
+This tells the model which tools are available and how to use them (especially the memory tools).
 
 ## Manual Setup
+
+If you prefer to set things up by hand instead of using the installer.
 
 ### 1. Clone and install
 
 ```bash
-gh repo clone Percona-Lab/IBEX ~/IBEX
+[ -d ~/IBEX ] || gh repo clone Percona-Lab/IBEX ~/IBEX
 cd ~/IBEX
 npm install
 ```
 
 ### 2. Configure credentials
 
-Create `~/.ibex-mcp.env` (outside the repo for security), or use the interactive `configure.sh` script:
-
-```bash
-~/IBEX/configure.sh
-```
-
-Or create the file manually:
+Create `~/.ibex-mcp.env` with the credentials for the connectors you want:
 
 ```bash
 # Slack (user token required for search)
@@ -128,75 +105,23 @@ SALESFORCE_INSTANCE_URL=https://yourcompany.my.salesforce.com
 SALESFORCE_ACCESS_TOKEN=...
 ```
 
-Only include the variables for connectors you want to use.
+Only include the variables for connectors you want to use. Or use the interactive configurator:
+
+```bash
+~/IBEX/configure.sh
+```
 
 ### 3. Set up the memory repo (optional)
 
 Create a **private** GitHub repo for memory storage. The first `memory_update` call will create the `MEMORY.md` file automatically.
 
-> **Security notice**: The memory file may accumulate sensitive context over time — meeting notes, project details, personal preferences, etc. Always create the repo as **private** and restrict collaborator access.
+> **Security notice**: The memory file may accumulate sensitive context over time — meeting notes, project details, personal preferences, etc. Always use a **private** repo and restrict collaborator access.
 
 Generate a [fine-grained personal access token](https://github.com/settings/tokens?type=beta) with:
 - **Repository access**: Only select your memory repo
 - **Permissions**: Contents → Read and write
 
-## Running with Open WebUI
-
-### Quick start
-
-Start all configured MCP servers and Open WebUI:
-
-```bash
-~/IBEX/start.sh
-```
-
-The script reads `~/.ibex-mcp.env` and only starts servers whose credentials are configured. Press `Ctrl+C` to stop all servers.
-
-### Starting servers individually
-
-Each server runs on its own port:
-
-```bash
-cd ~/IBEX
-
-node servers/slack.js --http            # port 3001
-node servers/notion.js --http           # port 3002
-node servers/jira.js --http             # port 3003
-node servers/memory.js --http           # port 3004
-node servers/servicenow.js --http      # port 3005
-node servers/salesforce.js --http      # port 3006
-```
-
-Or override the port with `MCP_SSE_PORT`:
-
-```bash
-MCP_SSE_PORT=4000 node servers/slack.js --http
-```
-
-Verify any server is running:
-
-```bash
-curl http://localhost:3001/health
-```
-
-### Step 2: Start Open WebUI
-
-Open WebUI connects to your LLM server. The installer pre-configures this, but for manual setup:
-
-**Percona internal servers (recommended — requires VPN):**
-
-```bash
-docker run -d \
-  --name open-webui \
-  -p 8080:8080 \
-  -v ~/open-webui-data:/app/backend/data \
-  -e OPENAI_API_BASE_URLS=https://mac-studio-lm.int.percona.com/v1 \
-  -e OPENAI_API_KEYS=none \
-  -e OLLAMA_BASE_URL=https://mac-studio-ollama.int.percona.com \
-  ghcr.io/open-webui/open-webui:main
-```
-
-**Local LLM server (LM Studio, Ollama, etc.):**
+### 4. Start Open WebUI
 
 ```bash
 docker run -d \
@@ -208,11 +133,16 @@ docker run -d \
   ghcr.io/open-webui/open-webui:main
 ```
 
-Open http://localhost:8080 and create your admin account on first launch.
+Adjust `OPENAI_API_BASE_URLS` to point to your LLM server. Common defaults:
+- **LM Studio**: `http://host.docker.internal:1234/v1`
+- **Ollama**: `http://host.docker.internal:11434` (also set `OLLAMA_BASE_URL`)
+- **Hosted endpoint**: use the full URL with your API key in `OPENAI_API_KEYS`
 
-### Step 3: Connect MCP servers to Open WebUI
+Open http://localhost:8080 and create your admin account.
 
-The installer pre-configures MCP tool servers automatically via the `TOOL_SERVER_CONNECTIONS` environment variable. If you need to add them manually:
+### 5. Connect MCP servers to Open WebUI
+
+The installer pre-configures this automatically via the `TOOL_SERVER_CONNECTIONS` environment variable. For manual setup:
 
 1. In Open WebUI, go to **Settings → External Tools**
 2. Add each server — set Type to **MCP (Streamable HTTP)**, Auth to **None**:
@@ -226,15 +156,32 @@ The installer pre-configures MCP tool servers automatically via the `TOOL_SERVER
 | ServiceNow | `http://host.docker.internal:3005/mcp` |
 | Salesforce | `http://host.docker.internal:3006/mcp` |
 
+### Running servers individually
+
+```bash
+cd ~/IBEX
+
+node servers/slack.js --http            # port 3001
+node servers/notion.js --http           # port 3002
+node servers/jira.js --http             # port 3003
+node servers/memory.js --http           # port 3004
+node servers/servicenow.js --http      # port 3005
+node servers/salesforce.js --http      # port 3006
+```
+
+Override the port: `MCP_SSE_PORT=4000 node servers/slack.js --http`
+
+Verify a server is running: `curl http://localhost:3001/health`
+
 ### All-in-one mode
 
-The `server.js` file runs all tools in a single server if you prefer:
+`server.js` runs all tools in a single server:
 
 ```bash
 node server.js --http    # all tools on port 3001
 ```
 
-## Other Server Modes
+## Server Modes
 
 All servers support three transport modes:
 
@@ -244,75 +191,23 @@ All servers support three transport modes:
 | stdio | *(none)* | Claude Desktop and other stdio-based MCP clients |
 | Legacy SSE | `--sse-only` | Older MCP clients |
 
-## Memory Tools
-
-The memory system stores a single markdown file in a private GitHub repo, providing persistent context across AI conversations.
-
-- **`memory_get`** — Returns the current markdown content from GitHub.
-- **`memory_update`** — Replaces the file entirely with new content. Accepts an optional `message` parameter for the git commit message.
-
-Updates use GitHub's SHA-based optimistic concurrency — the connector fetches the current SHA before each write to prevent blind overwrites.
-
-### System Prompt for Open WebUI
-
-To get the most out of the memory tools, add a system prompt that tells the model when to read and write memory. Go to **Settings → Models → (select your model) → System Prompt** and paste:
-
-```
-You have access to persistent memory tools: memory_get and memory_update.
-
-Use memory_get when:
-- The user says "what do you know about me" or asks for context from previous conversations
-- The user references something you should already know
-- You need background on a project, preference, or decision
-
-Use memory_update when:
-- The user says "remember this", "save this", or "update memory"
-- The user shares important context they'll want you to recall later
-
-When updating memory:
-1. Always call memory_get first to fetch the current content
-2. Merge new information into the existing markdown — never overwrite from scratch
-3. Call memory_update with the complete updated markdown
-4. Use clear ## headings and bullet points to keep it organized
-
-Do not call memory_get at the start of every conversation — only when context is needed.
-```
-
-> **Why not auto-load on every conversation?** Local models have limited context windows and tool-calling ability. Explicit triggers ("remember this", "what do you know") work more reliably and avoid adding latency to every first message.
-
 ## Notion Indexer (Optional)
 
-The Notion indexer builds a searchable JSON index of your Notion workspace by recursively crawling pages from root pages you configure.
-
-### Setup
+Builds a searchable JSON index of your Notion workspace by recursively crawling pages from root pages you configure.
 
 ```bash
-# 1. Create a config file
-node notion_indexer.js --init
-
-# 2. Edit notion_roots.json with your Notion page IDs
-#    (see instructions printed by --init)
-
-# 3. Build the index
-node notion_indexer.js --all
+node notion_indexer.js --init             # Create config file
+# Edit notion_roots.json with your Notion page IDs
+node notion_indexer.js --all              # Build index
+node notion_indexer.js --all --incremental  # Update existing index
+node notion_indexer.js --list             # List configured root pages
 ```
 
-The config file (`notion_roots.json`) and generated index (`notion_index.json`) are both gitignored — they contain your workspace-specific page IDs and content.
-
-### Usage
-
-```bash
-node notion_indexer.js --all                  # Index all configured root pages
-node notion_indexer.js --all --incremental    # Update existing index
-node notion_indexer.js abc123def456...        # Index a specific page
-node notion_indexer.js --list                 # List configured root pages
-```
+The config file (`notion_roots.json`) and generated index (`notion_index.json`) are both gitignored.
 
 ## Memory Sync (Optional)
 
-After each `memory_update`, the content can be automatically synced to Google Docs and/or Notion. This is 1-way (GitHub → targets) and non-blocking — sync failures are logged but never break the memory update.
-
-This makes your memory readable in a browser and accessible to other AI tools like Gemini Gems and ChatGPT.
+After each `memory_update`, content can be automatically synced to Google Docs and/or Notion. This is one-way (GitHub → targets) and non-blocking — sync failures are logged but never break the memory update.
 
 ### Notion Sync
 
@@ -322,45 +217,23 @@ Add to `~/.ibex-mcp.env`:
 NOTION_SYNC_PAGE_ID=abcdef1234567890    # Page ID to overwrite with memory content
 ```
 
-Requires `NOTION_TOKEN` to already be set. The target page will have its content replaced on each memory update. Create a dedicated page for this — don't use one with content you want to keep.
+Requires `NOTION_TOKEN` to already be set.
 
 ### Google Docs Sync
 
-**Step 1: Create OAuth credentials**
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project (or use existing)
-3. Enable the **Google Docs API**
-4. Go to **Credentials → Create Credentials → OAuth client ID**
-5. Application type: **Desktop app**
-6. Copy the Client ID and Client Secret
-
-**Step 2: Get a refresh token**
+1. Enable the **Google Docs API** in [Google Cloud Console](https://console.cloud.google.com/)
+2. Create OAuth credentials (Desktop app) → copy Client ID and Client Secret
+3. Run `GOOGLE_CLIENT_ID=xxx GOOGLE_CLIENT_SECRET=yyy node scripts/google-auth.js` to get a refresh token
+4. Add to `~/.ibex-mcp.env`:
 
 ```bash
-GOOGLE_CLIENT_ID=xxx GOOGLE_CLIENT_SECRET=yyy node scripts/google-auth.js
-```
-
-This opens a browser for authorization and prints the refresh token.
-
-**Step 3: Add to `.env`**
-
-```bash
-GOOGLE_DOC_ID=1BxiMVs0XRA5nFMdKvBd...    # From the Google Docs URL
+GOOGLE_DOC_ID=1BxiMVs0XRA5nFMdKvBd...
 GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=GOCSPX-...
 GOOGLE_REFRESH_TOKEN=1//0eXXXX...
 ```
 
-The Google Doc ID is the long string in the URL: `https://docs.google.com/document/d/<DOC_ID>/edit`
-
-### Sync Behavior
-
-- Both targets are optional and independent — configure one, both, or neither
-- Sync runs in the background after GitHub write succeeds
-- Failures are logged to stderr but don't affect the `memory_update` response
-- Google Docs receives plain markdown text (readable but not formatted)
-- Notion receives structured blocks (headings, bullets, code blocks, etc.)
+Both sync targets are optional and independent — configure one, both, or neither.
 
 ## Project Structure
 
@@ -368,6 +241,7 @@ The Google Doc ID is the long string in the URL: `https://docs.google.com/docume
 ├── install.sh             # Interactive installer (macOS)
 ├── configure.sh           # Add/update connector credentials
 ├── start.sh               # Launch configured servers + Open WebUI
+├── update.sh              # Update Open WebUI and IBEX
 ├── server.js              # All-in-one MCP server (all tools)
 ├── notion_indexer.js       # Notion workspace indexer
 ├── servers/
@@ -380,7 +254,7 @@ The Google Doc ID is the long string in the URL: `https://docs.google.com/docume
 │   └── salesforce.js      # Salesforce MCP server (port 3006)
 ├── connectors/
 │   ├── slack.js           # Slack Web API connector
-│   ├── notion.js          # Notion API connector (read + write for sync)
+│   ├── notion.js          # Notion API connector
 │   ├── jira.js            # Jira Cloud API connector
 │   ├── github.js          # GitHub Contents API connector (memory backend)
 │   ├── google-docs.js     # Google Docs API connector (memory sync)
@@ -389,9 +263,7 @@ The Google Doc ID is the long string in the URL: `https://docs.google.com/docume
 │   └── memory-sync.js     # Sync orchestrator (Notion + Google Docs)
 ├── scripts/
 │   └── google-auth.js     # One-time Google OAuth2 setup
-├── package.json
-├── LAUNCH.md              # Quick-start launch commands
-└── README.md
+└── package.json
 ```
 
 ## Built With
