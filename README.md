@@ -13,14 +13,20 @@ Designed to run alongside [Open WebUI](https://github.com/open-webui/open-webui)
 2. An LLM server — Percona has an internally hosted server on the corporate network (request access from IT, requires VPN). Or use a local server like [LM Studio](https://lmstudio.ai/)
 3. API credentials for the tools you want to connect (Slack, Notion, Jira, etc.)
 
-**Install IBEX** — open Terminal and paste:
+**One-time setup** — this is a private repo, so you need GitHub CLI to access it:
+
+1. Download and install [GitHub CLI](https://cli.github.com/) (click the `.pkg` download for Mac)
+2. Open **Terminal** and log in to GitHub:
+   ```bash
+   gh auth login
+   ```
+   Choose: **GitHub.com → HTTPS → Login with a web browser** and follow the prompts.
+
+**Install IBEX** — paste this in Terminal:
 
 ```bash
-brew install gh && gh auth login
 gh repo clone Percona-Lab/IBEX ~/IBEX && ~/IBEX/install.sh
 ```
-
-> This is a private repo. The first line installs [GitHub CLI](https://cli.github.com/) and logs you in (one-time setup). If you already have `gh` installed, skip to the second line.
 
 The installer walks you through everything. It will ask which connectors to set up — just skip any you don't need.
 
