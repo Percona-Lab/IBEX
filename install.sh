@@ -281,9 +281,10 @@ configure_credentials() {
 
 # ── Phase 5: Open WebUI Docker Setup ───────────────────────
 
-# Percona internal LLM server addresses (requires VPN)
+# Percona internal LLM server config (requires VPN)
 PERCONA_LM_URL="https://mac-studio-lm.int.percona.com/v1"
 PERCONA_OLLAMA_URL="https://mac-studio-ollama.int.percona.com"
+PERCONA_DEFAULT_MODEL="qwen3-coder-30"
 
 build_mcp_connections() {
   # Build TOOL_SERVER_CONNECTIONS JSON from configured credentials
@@ -373,14 +374,17 @@ setup_docker() {
     local openai_url=""
     local openai_key=""
     local ollama_url=""
+    local default_model=""
 
     case "$backend_choice" in
       1)
         openai_url="$PERCONA_LM_URL"
         openai_key="none"
         ollama_url="$PERCONA_OLLAMA_URL"
+        default_model="$PERCONA_DEFAULT_MODEL"
         echo ""
         printf "  ${GREEN}✓${NC} Using Percona internal LLM servers\n"
+        printf "  ${GREEN}✓${NC} Default model: %s\n" "$default_model"
         printf "  ${YELLOW}!${NC} Make sure you're connected to Percona VPN\n"
         ;;
       2)
@@ -415,7 +419,9 @@ setup_docker() {
         openai_url="${PERCONA_LM_URL};${local_url}"
         openai_key="none;dummy"
         ollama_url="$PERCONA_OLLAMA_URL"
+        default_model="$PERCONA_DEFAULT_MODEL"
         printf "\n  ${GREEN}✓${NC} Using Percona internal + local LLM servers\n"
+        printf "  ${GREEN}✓${NC} Default model: %s\n" "$default_model"
         printf "  ${YELLOW}!${NC} Percona servers require VPN connection\n"
         ;;
       4)
@@ -444,6 +450,10 @@ setup_docker() {
 
     if [ -n "$ollama_url" ]; then
       docker_cmd+=(-e "OLLAMA_BASE_URL=$ollama_url")
+    fi
+
+    if [ -n "$default_model" ]; then
+      docker_cmd+=(-e "DEFAULT_MODELS=$default_model")
     fi
 
     if [ "$mcp_json" != "[]" ]; then
