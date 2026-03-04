@@ -213,9 +213,33 @@ install_ibex() {
   echo "============================================================"
   echo ""
 
-  IBEX_DIR="$HOME/IBEX"
+  # Detect if running from an extracted zip (no .git directory)
+  local script_dir
+  script_dir="$(cd "$(dirname "$0")" && pwd)"
 
-  if [ -d "$IBEX_DIR/.git" ]; then
+  if [ -f "$script_dir/package.json" ] && [ ! -d "$script_dir/.git" ]; then
+    # Running from extracted zip — use this directory
+    IBEX_DIR="$script_dir"
+    if [ "$IBEX_DIR" != "$HOME/IBEX" ]; then
+      # Move to ~/IBEX if not already there
+      if [ -d "$HOME/IBEX" ]; then
+        printf "  ${YELLOW}!${NC} ~/IBEX already exists\n"
+        if ask_yn "  Replace with this copy?" "y"; then
+          rm -rf "$HOME/IBEX"
+          cp -R "$IBEX_DIR" "$HOME/IBEX"
+          IBEX_DIR="$HOME/IBEX"
+        fi
+      else
+        cp -R "$IBEX_DIR" "$HOME/IBEX"
+        IBEX_DIR="$HOME/IBEX"
+      fi
+    fi
+    cd "$IBEX_DIR"
+    npm install
+    printf "  ${GREEN}✓${NC} Installed from zip\n"
+  elif [ -d "$HOME/IBEX/.git" ]; then
+    # Existing git clone
+    IBEX_DIR="$HOME/IBEX"
     printf "  ${GREEN}✓${NC} IBEX directory exists at %s\n" "$IBEX_DIR"
     if ask_yn "  Update to latest version? (git pull && npm install)" "y"; then
       cd "$IBEX_DIR"
@@ -227,6 +251,8 @@ install_ibex() {
       echo "  Skipped update"
     fi
   else
+    # Fresh clone
+    IBEX_DIR="$HOME/IBEX"
     echo "  Cloning IBEX to $IBEX_DIR..."
     if command -v gh &>/dev/null; then
       gh repo clone Percona-Lab/IBEX "$IBEX_DIR"
