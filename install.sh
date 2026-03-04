@@ -433,8 +433,11 @@ setup_docker() {
         else
           printf " ${RED}not connected${NC}\n"
           printf "\n  ${RED}✗${NC} Cannot reach Percona LLM servers.\n"
-          printf "    Connect to Percona VPN and re-run the installer.\n"
-          printf "    Or choose a different LLM backend option.\n\n"
+          printf "    1. Make sure you're connected to Percona VPN\n"
+          printf "    2. You may also need IT to grant network access — open a\n"
+          printf "       ticket at ${YELLOW}https://per.co.na/hd${NC} requesting access to\n"
+          printf "       mac-studio-lm.int.percona.com and mac-studio-ollama.int.percona.com\n"
+          printf "    Or choose a different LLM backend option below.\n\n"
           read -rp "  Press Enter to go back to LLM selection..."
           continue
         fi
@@ -469,8 +472,11 @@ setup_docker() {
         else
           printf " ${RED}not connected${NC}\n"
           printf "\n  ${RED}✗${NC} Cannot reach Percona LLM servers.\n"
-          printf "    Connect to Percona VPN and re-run the installer.\n"
-          printf "    Or choose a different LLM backend option.\n\n"
+          printf "    1. Make sure you're connected to Percona VPN\n"
+          printf "    2. You may also need IT to grant network access — open a\n"
+          printf "       ticket at ${YELLOW}https://per.co.na/hd${NC} requesting access to\n"
+          printf "       mac-studio-lm.int.percona.com and mac-studio-ollama.int.percona.com\n"
+          printf "    Or choose a different LLM backend option below.\n\n"
           read -rp "  Press Enter to go back to LLM selection..."
           continue
         fi
