@@ -17,6 +17,8 @@ import { SlackConnector } from './connectors/slack.js';
 import { NotionConnector } from './connectors/notion.js';
 import { JiraConnector } from './connectors/jira.js';
 import { GitHubConnector } from './connectors/github.js';
+import { ServiceNowConnector } from './connectors/servicenow.js';
+import { SalesforceConnector } from './connectors/salesforce.js';
 import { MemorySyncManager } from './connectors/memory-sync.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -66,6 +68,27 @@ class IbexMCPServer {
     } catch (e) {
       console.error('GitHub connector failed to initialize:', e.message);
       this.github = null;
+    }
+
+    try {
+      this.servicenow = new ServiceNowConnector(
+        process.env.SERVICENOW_INSTANCE,
+        process.env.SERVICENOW_USERNAME,
+        process.env.SERVICENOW_PASSWORD
+      );
+    } catch (e) {
+      console.error('ServiceNow connector failed to initialize:', e.message);
+      this.servicenow = null;
+    }
+
+    try {
+      this.salesforce = new SalesforceConnector(
+        process.env.SALESFORCE_INSTANCE_URL,
+        process.env.SALESFORCE_ACCESS_TOKEN
+      );
+    } catch (e) {
+      console.error('Salesforce connector failed to initialize:', e.message);
+      this.salesforce = null;
     }
 
     this.sync = null;
@@ -245,6 +268,94 @@ class IbexMCPServer {
             required: ['content'],
           },
         },
+
+        // SERVICENOW
+        {
+          name: 'servicenow_query_table',
+          description: 'Query a ServiceNow table with optional filters.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              table: { type: 'string', description: 'e.g. incident, sys_user, cmdb_ci' },
+              query: { type: 'string', description: 'Encoded query string' },
+              fields: { type: 'array', items: { type: 'string' } },
+              limit: { type: 'number', default: 10 },
+            },
+            required: ['table'],
+          },
+        },
+        {
+          name: 'servicenow_get_record',
+          description: 'Get a ServiceNow record by sys_id.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              table: { type: 'string' },
+              sys_id: { type: 'string' },
+            },
+            required: ['table', 'sys_id'],
+          },
+        },
+        {
+          name: 'servicenow_list_tables',
+          description: 'List common ServiceNow tables.',
+          inputSchema: { type: 'object', properties: {} },
+        },
+
+        // SALESFORCE
+        {
+          name: 'salesforce_soql_query',
+          description: 'Run a SOQL query against Salesforce.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              query: { type: 'string', description: 'SOQL query string' },
+              limit: { type: 'number', default: 50 },
+            },
+            required: ['query'],
+          },
+        },
+        {
+          name: 'salesforce_get_record',
+          description: 'Get a Salesforce record by object type and ID.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              object_type: { type: 'string', description: 'e.g. Account, Contact, Opportunity' },
+              record_id: { type: 'string', description: 'Salesforce record ID' },
+              fields: { type: 'array', items: { type: 'string' } },
+            },
+            required: ['object_type', 'record_id'],
+          },
+        },
+        {
+          name: 'salesforce_search',
+          description: 'Global search across Salesforce objects (Accounts, Contacts, Opportunities, Cases, Leads).',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              query: { type: 'string', description: 'Search term' },
+              limit: { type: 'number', default: 20 },
+            },
+            required: ['query'],
+          },
+        },
+        {
+          name: 'salesforce_describe_object',
+          description: 'Get the schema/fields of a Salesforce object.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              object_type: { type: 'string', description: 'e.g. Account, Contact, Opportunity' },
+            },
+            required: ['object_type'],
+          },
+        },
+        {
+          name: 'salesforce_list_objects',
+          description: 'List available Salesforce objects.',
+          inputSchema: { type: 'object', properties: {} },
+        },
       ],
     }));
 
@@ -323,6 +434,48 @@ class IbexMCPServer {
             if (this.sync?.enabled) {
               this.sync.sync(args.content).catch(() => {});
             }
+            return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+          }
+        }
+
+        // SERVICENOW HANDLERS
+        if (name.startsWith('servicenow_')) {
+          if (!this.servicenow) throw new Error('ServiceNow connector not available. Check SERVICENOW_INSTANCE, SERVICENOW_USERNAME, SERVICENOW_PASSWORD env vars.');
+          if (name === 'servicenow_query_table') {
+            const results = await this.servicenow.queryTable(args.table, args.query, args.fields, args.limit);
+            return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+          }
+          if (name === 'servicenow_get_record') {
+            const results = await this.servicenow.getRecord(args.table, args.sys_id);
+            return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+          }
+          if (name === 'servicenow_list_tables') {
+            const results = await this.servicenow.listTables();
+            return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+          }
+        }
+
+        // SALESFORCE HANDLERS
+        if (name.startsWith('salesforce_')) {
+          if (!this.salesforce) throw new Error('Salesforce connector not available. Check SALESFORCE_INSTANCE_URL, SALESFORCE_ACCESS_TOKEN env vars.');
+          if (name === 'salesforce_soql_query') {
+            const results = await this.salesforce.soqlQuery(args.query, args.limit);
+            return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+          }
+          if (name === 'salesforce_get_record') {
+            const results = await this.salesforce.getRecord(args.object_type, args.record_id, args.fields);
+            return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+          }
+          if (name === 'salesforce_search') {
+            const results = await this.salesforce.globalSearch(args.query, args.limit);
+            return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+          }
+          if (name === 'salesforce_describe_object') {
+            const results = await this.salesforce.describeObject(args.object_type);
+            return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+          }
+          if (name === 'salesforce_list_objects') {
+            const results = await this.salesforce.listObjects();
             return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
           }
         }

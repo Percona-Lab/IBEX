@@ -2,9 +2,40 @@
 
 **Integration Bridge for EXtended systems**
 
-A [Model Context Protocol](https://modelcontextprotocol.io/) server that connects AI assistants to your workplace tools — Slack, Notion, Jira, and a persistent GitHub-backed memory system.
+A [Model Context Protocol](https://modelcontextprotocol.io/) server that connects AI assistants to your workplace tools — Slack, Notion, Jira, ServiceNow, Salesforce, and a persistent GitHub-backed memory system.
 
 Designed to run alongside [Open WebUI](https://github.com/open-webui/open-webui) and a local LLM server (LM Studio, Ollama, etc.) for a fully self-hosted AI assistant with access to your internal tools.
+
+## Get Started (Mac)
+
+**What you need first:**
+1. [Docker Desktop](https://www.docker.com/products/docker-desktop/) — install and open it
+2. An LLM server like [LM Studio](https://lmstudio.ai/) — install, download a model, and start the server
+3. API credentials for the tools you want to connect (Slack, Notion, Jira, etc.)
+
+**Install IBEX** — open Terminal and paste:
+
+```bash
+git clone https://github.com/Percona-Lab/IBEX.git ~/IBEX && ~/IBEX/install.sh
+```
+
+The installer walks you through everything. It will ask which connectors to set up — just skip any you don't need.
+
+**Next time you want to start it:**
+
+```bash
+~/IBEX/start.sh
+```
+
+Then open [http://localhost:8080](http://localhost:8080) in your browser.
+
+**Want to add a connector later?**
+
+```bash
+~/IBEX/configure.sh
+```
+
+---
 
 ## Features
 
@@ -14,6 +45,8 @@ Designed to run alongside [Open WebUI](https://github.com/open-webui/open-webui)
 | **Notion** | 3002 | `notion_search`, `notion_get_page`, `notion_get_block_children`, `notion_query_database` | Search pages, read content, query databases |
 | **Jira** | 3003 | `jira_search_issues`, `jira_get_issue`, `jira_get_projects` | JQL search, issue details, project listing |
 | **Memory** | 3004 | `memory_get`, `memory_update` | Read/write a persistent markdown file on GitHub |
+| **ServiceNow** | 3005 | `servicenow_query_table`, `servicenow_get_record`, `servicenow_list_tables` | Query tables, get records |
+| **Salesforce** | 3006 | `salesforce_soql_query`, `salesforce_get_record`, `salesforce_search`, `salesforce_describe_object`, `salesforce_list_objects` | SOQL queries, record details, global search |
 
 Each server runs independently — start only the ones you need.
 
@@ -23,7 +56,26 @@ Each server runs independently — start only the ones you need.
 - [Docker](https://www.docker.com/) (for Open WebUI)
 - A local LLM server ([LM Studio](https://lmstudio.ai/), [Ollama](https://ollama.ai/), etc.)
 
-## Setup
+## Quick Install (macOS)
+
+Run the interactive installer — it checks dependencies, collects credentials, sets up Docker, and starts everything:
+
+```bash
+git clone https://github.com/Percona-Lab/IBEX.git ~/IBEX
+~/IBEX/install.sh
+```
+
+The installer will:
+1. Install missing dependencies (Homebrew, Node.js, Git)
+2. Walk you through configuring each connector
+3. Set up Open WebUI with Docker
+4. Start all configured servers
+
+After installation:
+- **Start servers**: `~/IBEX/start.sh`
+- **Add/update connectors**: `~/IBEX/configure.sh`
+
+## Manual Setup
 
 ### 1. Clone and install
 
@@ -35,7 +87,13 @@ npm install
 
 ### 2. Configure credentials
 
-Create `~/.ibex-mcp.env` (outside the repo for security):
+Create `~/.ibex-mcp.env` (outside the repo for security), or use the interactive `configure.sh` script:
+
+```bash
+~/IBEX/configure.sh
+```
+
+Or create the file manually:
 
 ```bash
 # Slack (user token required for search)
@@ -54,6 +112,15 @@ GITHUB_TOKEN=ghp_...                          # Fine-grained PAT with Contents r
 GITHUB_OWNER=your-github-org                  # GitHub org or username
 GITHUB_REPO=ai-memory                         # Private repo for memory storage
 GITHUB_MEMORY_PATH=MEMORY.md                  # File path (default: MEMORY.md)
+
+# ServiceNow
+SERVICENOW_INSTANCE=yourcompany.service-now.com
+SERVICENOW_USERNAME=your.username
+SERVICENOW_PASSWORD=...
+
+# Salesforce
+SALESFORCE_INSTANCE_URL=https://yourcompany.my.salesforce.com
+SALESFORCE_ACCESS_TOKEN=...
 ```
 
 Only include the variables for connectors you want to use.
@@ -72,13 +139,13 @@ Generate a [fine-grained personal access token](https://github.com/settings/toke
 
 ### Quick start
 
-Start all MCP servers and Open WebUI with one command:
+Start all configured MCP servers and Open WebUI:
 
 ```bash
 ~/IBEX/start.sh
 ```
 
-Press `Ctrl+C` to stop all MCP servers. The script starts each server in the background and launches the Open WebUI Docker container.
+The script reads `~/.ibex-mcp.env` and only starts servers whose credentials are configured. Press `Ctrl+C` to stop all servers.
 
 ### Starting servers individually
 
@@ -91,6 +158,8 @@ node servers/slack.js --http            # port 3001
 node servers/notion.js --http           # port 3002
 node servers/jira.js --http             # port 3003
 node servers/memory.js --http           # port 3004
+node servers/servicenow.js --http      # port 3005
+node servers/salesforce.js --http      # port 3006
 ```
 
 Or override the port with `MCP_SSE_PORT`:
@@ -132,6 +201,8 @@ Open http://localhost:8080 and create your admin account on first launch.
 | Notion | Streamable HTTP | `http://host.docker.internal:3002/mcp` |
 | Jira | Streamable HTTP | `http://host.docker.internal:3003/mcp` |
 | Memory | Streamable HTTP | `http://host.docker.internal:3004/mcp` |
+| ServiceNow | Streamable HTTP | `http://host.docker.internal:3005/mcp` |
+| Salesforce | Streamable HTTP | `http://host.docker.internal:3006/mcp` |
 
 3. Auth: None for all servers
 4. Toggle on/off individual servers per conversation as needed
@@ -275,21 +346,27 @@ The Google Doc ID is the long string in the URL: `https://docs.google.com/docume
 ## Project Structure
 
 ```
+├── install.sh             # Interactive installer (macOS)
+├── configure.sh           # Add/update connector credentials
+├── start.sh               # Launch configured servers + Open WebUI
 ├── server.js              # All-in-one MCP server (all tools)
-├── start.sh               # Launch all servers + Open WebUI
 ├── notion_indexer.js       # Notion workspace indexer
 ├── servers/
 │   ├── shared.js          # Shared transport and startup logic
 │   ├── slack.js           # Slack MCP server (port 3001)
 │   ├── notion.js          # Notion MCP server (port 3002)
 │   ├── jira.js            # Jira MCP server (port 3003)
-│   └── memory.js          # Memory MCP server (port 3004)
+│   ├── memory.js          # Memory MCP server (port 3004)
+│   ├── servicenow.js      # ServiceNow MCP server (port 3005)
+│   └── salesforce.js      # Salesforce MCP server (port 3006)
 ├── connectors/
 │   ├── slack.js           # Slack Web API connector
 │   ├── notion.js          # Notion API connector (read + write for sync)
 │   ├── jira.js            # Jira Cloud API connector
 │   ├── github.js          # GitHub Contents API connector (memory backend)
 │   ├── google-docs.js     # Google Docs API connector (memory sync)
+│   ├── servicenow.js      # ServiceNow Table API connector
+│   ├── salesforce.js      # Salesforce REST API connector
 │   └── memory-sync.js     # Sync orchestrator (Notion + Google Docs)
 ├── scripts/
 │   └── google-auth.js     # One-time Google OAuth2 setup
