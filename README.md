@@ -10,7 +10,7 @@ Designed to run alongside [Open WebUI](https://github.com/open-webui/open-webui)
 
 **What you need first:**
 1. [Docker Desktop](https://www.docker.com/products/docker-desktop/) — install and open it
-2. An LLM server like [LM Studio](https://lmstudio.ai/) — install, download a model, and start the server
+2. An LLM server — Percona has an internally hosted server on the corporate network (request access from IT, requires VPN). Or use a local server like [LM Studio](https://lmstudio.ai/)
 3. API credentials for the tools you want to connect (Slack, Notion, Jira, etc.)
 
 **Install IBEX** — open Terminal and paste:
@@ -44,11 +44,13 @@ Then open [http://localhost:8080](http://localhost:8080) in your browser.
 | **Slack** | 3001 | `slack_search_messages`, `slack_get_channel_history`, `slack_list_channels`, `slack_get_thread` | Search messages, read channels and threads |
 | **Notion** | 3002 | `notion_search`, `notion_get_page`, `notion_get_block_children`, `notion_query_database` | Search pages, read content, query databases |
 | **Jira** | 3003 | `jira_search_issues`, `jira_get_issue`, `jira_get_projects` | JQL search, issue details, project listing |
-| **Memory** | 3004 | `memory_get`, `memory_update` | Read/write a persistent markdown file on GitHub |
 | **ServiceNow** | 3005 | `servicenow_query_table`, `servicenow_get_record`, `servicenow_list_tables` | Query tables, get records |
 | **Salesforce** | 3006 | `salesforce_soql_query`, `salesforce_get_record`, `salesforce_search`, `salesforce_describe_object`, `salesforce_list_objects` | SOQL queries, record details, global search |
+| **Memory** | 3004 | `memory_get`, `memory_update` | Read/write a persistent markdown file on GitHub |
 
 Each server runs independently — start only the ones you need.
+
+> **Note:** If you already use [PACK](https://github.com/Percona-Lab/PACK), the Memory connector shares the same GitHub-backed memory system. You do not need to configure it again in IBEX — your existing credentials and repo will work.
 
 ## Prerequisites
 

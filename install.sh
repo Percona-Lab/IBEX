@@ -76,20 +76,22 @@ want to use. You can skip any connector you don't need.
  JIRA         Jira domain, email, and API token
               → https://id.atlassian.com/manage-profile/security/api-tokens
 
- MEMORY       GitHub fine-grained PAT (ghp_...) + private repo
-              → Create private repo for memory storage
-              → https://github.com/settings/tokens?type=beta
-              → Fine-grained PAT → Scope to org → select repo
-              → Permissions: Contents → Read and write
-
  SERVICENOW   ServiceNow instance URL, username, and password
               → Instance format: yourcompany.service-now.com
 
  SALESFORCE   Salesforce instance URL and access token
               → Instance format: https://yourcompany.my.salesforce.com
 
+ MEMORY       GitHub fine-grained PAT (ghp_...) + private repo
+              → If you already use PACK, skip this — same credentials work.
+              → Create private repo for memory storage
+              → https://github.com/settings/tokens?type=beta
+              → Fine-grained PAT → Scope to org → select repo
+              → Permissions: Contents → Read and write
+
  OPEN WEBUI   Requires Docker Desktop (will be installed if missing)
-              → Also need IP/port of your local LLM server
+              → Percona has an internally hosted LLM server (requires VPN)
+              → Request access from IT, or use a local server:
               → LM Studio default: localhost:1234
               → Ollama default: localhost:11434
 

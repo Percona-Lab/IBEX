@@ -169,6 +169,7 @@ configure_jira() {
 configure_memory() {
   echo ""
   echo "  ${BOLD}Memory (GitHub) Setup${NC}"
+  echo "  If you already use PACK, skip this — same credentials work."
   echo "  → Create a private repo for memory storage"
   echo "  → https://github.com/settings/tokens?type=beta"
   echo "  → Fine-grained PAT → Scope to your org → select repo"
@@ -318,7 +319,7 @@ echo ""
 changed=false
 
 # Iterate through each connector
-for connector in slack notion jira memory servicenow salesforce; do
+for connector in slack notion jira servicenow salesforce memory; do
   configured=false
   label=""
   case $connector in
