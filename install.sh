@@ -360,7 +360,7 @@ build_system_prompt() {
   fi
 
   prompt+="\n"
-  prompt+="\nUse the tools above when the user asks questions about their work data. If the user asks about a system not listed here, let them know that connector is not configured."
+  prompt+="\nWhen the user asks about their work data (messages, tickets, pages, records), ALWAYS use the relevant tool to look it up. Never guess or answer from memory — the tools have real-time access to live data. If the user asks about a system not listed here, let them know that connector is not configured."
 
   echo -e "$prompt"
 }
