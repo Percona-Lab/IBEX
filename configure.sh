@@ -351,6 +351,81 @@ if $changed; then
   echo " Configuration saved to $ENV_FILE"
   echo "============================================================"
   show_status
+
+  # Rebuild system prompt based on new configuration
+  IBEX_DIR="$(cd "$(dirname "$0")" && pwd)"
+  source "$IBEX_DIR/scripts/build-prompt.sh"
+
+  sys_prompt=$(build_system_prompt)
+  PROMPT_FILE="$HOME/.ibex-system-prompt.txt"
+  echo -e "$sys_prompt" > "$PROMPT_FILE"
+
+  echo ""
+  echo "Updated system prompt saved to $PROMPT_FILE"
+  echo ""
+  echo "────────────────────────────────────────"
+  echo -e "$sys_prompt"
+  echo "────────────────────────────────────────"
+  echo ""
+
+  if ask_yn "  Update Open WebUI system prompt automatically?"; then
+    echo ""
+    read -rp "  Open WebUI email: " email
+    read -rsp "  Open WebUI password: " password
+    echo ""
+
+    auth_response=$(curl -sf -X POST http://localhost:8080/api/v1/auths/signin \
+      -H "Content-Type: application/json" \
+      -d "{\"email\":\"${email}\",\"password\":\"${password}\"}" 2>/dev/null)
+
+    token=$(echo "$auth_response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+
+    if [ -n "$token" ]; then
+      python3 -c "
+import sys, json, urllib.request
+
+token = sys.argv[1]
+prompt_file = sys.argv[2]
+
+with open(prompt_file) as f:
+    sys_prompt = f.read().strip()
+
+try:
+    req = urllib.request.Request(
+        'http://localhost:8080/api/v1/users/user/settings',
+        headers={'Authorization': f'Bearer {token}'},
+    )
+    resp = urllib.request.urlopen(req)
+    settings = json.loads(resp.read())
+except Exception:
+    settings = {}
+
+settings['system'] = sys_prompt
+
+payload = json.dumps(settings).encode()
+req = urllib.request.Request(
+    'http://localhost:8080/api/v1/users/user/settings/update',
+    data=payload,
+    headers={
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json',
+    },
+    method='POST',
+)
+urllib.request.urlopen(req)
+print('ok')
+" "$token" "$PROMPT_FILE" 2>/dev/null | grep -q "ok" && \
+        printf "  ${GREEN}✓${NC} System prompt updated in Open WebUI\n" || \
+        printf "  ${RED}✗${NC} Failed to update system prompt\n"
+    else
+      printf "  ${RED}✗${NC} Could not sign in — check your credentials\n"
+      echo "  You can paste the prompt manually from $PROMPT_FILE"
+    fi
+  else
+    echo "  You can paste it manually in Open WebUI:"
+    echo "  Settings → General → System Prompt"
+  fi
+
   echo ""
   echo "Restart IBEX servers to apply changes:"
   echo "  ~/IBEX/start.sh"

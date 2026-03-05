@@ -26,7 +26,7 @@ The installer handles everything — it installs missing dependencies (Homebrew,
 | Command | What it does |
 |---------|--------------|
 | `~/IBEX/start.sh` | Start MCP servers + Open WebUI, then open http://localhost:8080 |
-| `~/IBEX/configure.sh` | Add or update connector credentials |
+| `~/IBEX/configure.sh` | Add or update connector credentials + rebuild system prompt |
 | `~/IBEX/update.sh` | Update Open WebUI and IBEX to the latest versions |
 
 ## Features
@@ -259,6 +259,7 @@ Both sync targets are optional and independent — configure one, both, or neith
 │   ├── salesforce.js      # Salesforce REST API connector
 │   └── memory-sync.js     # Sync orchestrator (Notion + Google Docs)
 ├── scripts/
+│   ├── build-prompt.sh    # System prompt generator (shared)
 │   └── google-auth.js     # One-time Google OAuth2 setup
 └── package.json
 ```
