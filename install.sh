@@ -543,6 +543,29 @@ configure_models() {
   read -rp "  Press Enter after creating your account..."
   echo ""
 
+  # Build system prompt and save to file
+  local sys_prompt prompt_file
+  sys_prompt=$(build_system_prompt)
+  prompt_file="$HOME/.ibex-system-prompt.txt"
+  echo -e "$sys_prompt" > "$prompt_file"
+
+  echo "  System prompt saved to $prompt_file"
+  echo ""
+  echo "  ────────────────────────────────────────"
+  echo -e "$sys_prompt"
+  echo "  ────────────────────────────────────────"
+  echo ""
+
+  if ! ask_yn "  Configure Open WebUI automatically? (requires sign-in)" "y"; then
+    echo ""
+    echo "  To set up manually:"
+    echo "  1. Go to Settings → General → System Prompt and paste from $prompt_file"
+    echo "  2. Go to Settings → Models → (each model) → Tools to assign tools"
+    return
+  fi
+
+  echo ""
+
   # Get credentials
   local email password
   read -rp "  Enter your Open WebUI email: " email
@@ -557,7 +580,7 @@ configure_models() {
 
   if [ -z "$auth_response" ]; then
     printf "\n  ${RED}✗${NC} Could not sign in — check your email and password\n"
-    printf "    You can configure models manually in Settings.\n"
+    printf "    You can paste the prompt manually from %s\n" "$prompt_file"
     return
   fi
 
@@ -569,45 +592,6 @@ configure_models() {
   fi
 
   printf "  ${GREEN}✓${NC} Signed in\n"
-
-  # Build system prompt and save to temp file for Python to read
-  local sys_prompt
-  sys_prompt=$(build_system_prompt)
-  local prompt_file
-  prompt_file=$(mktemp)
-  echo -e "$sys_prompt" > "$prompt_file"
-
-  # Get list of available tools
-  local tools_response tool_ids
-  tools_response=$(curl -sf http://localhost:8080/api/v1/tools/ \
-    -H "Authorization: Bearer $token" 2>/dev/null)
-
-  tool_ids=$(echo "$tools_response" | python3 -c "
-import sys, json
-tools = json.load(sys.stdin)
-ids = [t['id'] for t in tools if t.get('id')]
-print(json.dumps(ids))
-" 2>/dev/null || echo "[]")
-
-  if [ "$tool_ids" = "[]" ]; then
-    printf "  ${YELLOW}!${NC} No tools discovered yet — servers may still be loading\n"
-    printf "    You can assign tools manually in Settings → Models.\n"
-  else
-    local tool_count
-    tool_count=$(echo "$tool_ids" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null)
-    printf "  ${GREEN}✓${NC} Found %s tool(s)\n" "$tool_count"
-  fi
-
-  # Get list of models
-  local models_response
-  models_response=$(curl -sf http://localhost:8080/api/v1/models/ \
-    -H "Authorization: Bearer $token" 2>/dev/null)
-
-  if [ -z "$models_response" ]; then
-    printf "  ${YELLOW}!${NC} No models found — configure LLM connections first\n"
-    rm -f "$prompt_file"
-    return
-  fi
 
   # Set system prompt at user level (applies to all models)
   python3 -c "
@@ -648,8 +632,38 @@ print('ok')
     printf "  ${GREEN}✓${NC} System prompt set (user-level, applies to all models)\n" || \
     printf "  ${RED}✗${NC} Failed to set system prompt\n"
 
+  # Get list of available tools
+  local tools_response tool_ids
+  tools_response=$(curl -sf http://localhost:8080/api/v1/tools/ \
+    -H "Authorization: Bearer $token" 2>/dev/null)
+
+  tool_ids=$(echo "$tools_response" | python3 -c "
+import sys, json
+tools = json.load(sys.stdin)
+ids = [t['id'] for t in tools if t.get('id')]
+print(json.dumps(ids))
+" 2>/dev/null || echo "[]")
+
+  if [ "$tool_ids" = "[]" ]; then
+    printf "  ${YELLOW}!${NC} No tools discovered yet — servers may still be loading\n"
+    printf "    You can assign tools manually in Settings → Models.\n"
+  else
+    local tool_count
+    tool_count=$(echo "$tool_ids" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null)
+    printf "  ${GREEN}✓${NC} Found %s tool(s)\n" "$tool_count"
+  fi
+
   # Assign tools to each model
   if [ "$tool_ids" != "[]" ]; then
+    local models_response
+    models_response=$(curl -sf http://localhost:8080/api/v1/models/ \
+      -H "Authorization: Bearer $token" 2>/dev/null)
+
+    if [ -z "$models_response" ]; then
+      printf "  ${YELLOW}!${NC} No models found — configure LLM connections first\n"
+      return
+    fi
+
     echo "$models_response" | python3 -c "
 import sys, json, urllib.request
 
@@ -700,7 +714,6 @@ for m in models:
     done
   fi
 
-  rm -f "$prompt_file"
   printf "\n  ${GREEN}✓${NC} Configuration complete\n"
   printf "  ${YELLOW}!${NC} Refresh Open WebUI in your browser to see the changes\n"
 }
