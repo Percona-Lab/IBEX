@@ -5,16 +5,18 @@
 ```bash
 cd ~/IBEX
 
-node servers/slack.js --http            # port 3001
-node servers/notion.js --http           # port 3002
-node servers/jira.js --http             # port 3003
-node servers/memory.js --http           # port 3004
+node servers/slack.js --sse-only            # port 3001
+node servers/notion.js --sse-only           # port 3002
+node servers/jira.js --sse-only             # port 3003
+node servers/memory.js --sse-only           # port 3004
+node servers/servicenow.js --sse-only      # port 3005
+node servers/salesforce.js --sse-only      # port 3006
 ```
 
 ## All-in-one (all tools on one port)
 
 ```bash
-cd ~/IBEX && node server.js --http
+cd ~/IBEX && node server.js --sse-only
 ```
 
 Health check: `curl http://localhost:3001/health`
@@ -37,14 +39,16 @@ Access at: http://localhost:8080
 
 | Server | URL |
 |--------|-----|
-| Slack | `http://host.docker.internal:3001/mcp` |
-| Notion | `http://host.docker.internal:3002/mcp` |
-| Jira | `http://host.docker.internal:3003/mcp` |
-| Memory | `http://host.docker.internal:3004/mcp` |
+| Slack | `http://host.docker.internal:3001/sse` |
+| Notion | `http://host.docker.internal:3002/sse` |
+| Jira | `http://host.docker.internal:3003/sse` |
+| Memory | `http://host.docker.internal:3004/sse` |
+| ServiceNow | `http://host.docker.internal:3005/sse` |
+| Salesforce | `http://host.docker.internal:3006/sse` |
 
-Type: Streamable HTTP / Auth: None
+Type: SSE / Auth: None
 
 ## Other Server Modes
 
 - `node servers/slack.js` -- stdio
-- `node servers/slack.js --sse-only` -- legacy SSE
+- `node servers/slack.js --http` -- Streamable HTTP (modern clients)

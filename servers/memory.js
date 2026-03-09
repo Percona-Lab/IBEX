@@ -22,12 +22,12 @@ await createMCPServer({
   defaultPort: 3004,
   tools: [
     {
-      name: 'memory_get',
+      name: 'get',
       description: 'Get persistent memory contents (markdown).',
       inputSchema: { type: 'object', properties: {} },
     },
     {
-      name: 'memory_update',
+      name: 'update',
       description: 'Replace persistent memory with new markdown content.',
       inputSchema: {
         type: 'object',
@@ -41,8 +41,8 @@ await createMCPServer({
   ],
   handler: async (name, args) => {
     switch (name) {
-      case 'memory_get': return github.getMemory();
-      case 'memory_update': {
+      case 'get': return github.getMemory();
+      case 'update': {
         const result = await github.updateMemory(args.content, args.message);
         if (sync.enabled) {
           sync.sync(args.content).catch(() => {});

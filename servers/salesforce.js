@@ -5,7 +5,9 @@ import { SalesforceConnector } from '../connectors/salesforce.js';
 
 const sf = new SalesforceConnector(
   process.env.SALESFORCE_INSTANCE_URL,
-  process.env.SALESFORCE_ACCESS_TOKEN
+  process.env.SALESFORCE_USERNAME,
+  process.env.SALESFORCE_PASSWORD,
+  process.env.SALESFORCE_SECURITY_TOKEN
 );
 
 await createMCPServer({
@@ -13,7 +15,7 @@ await createMCPServer({
   defaultPort: 3006,
   tools: [
     {
-      name: 'salesforce_soql_query',
+      name: 'soql_query',
       description: 'Run a SOQL query against Salesforce.',
       inputSchema: {
         type: 'object',
@@ -25,7 +27,7 @@ await createMCPServer({
       },
     },
     {
-      name: 'salesforce_get_record',
+      name: 'get_record',
       description: 'Get a Salesforce record by object type and ID.',
       inputSchema: {
         type: 'object',
@@ -38,7 +40,7 @@ await createMCPServer({
       },
     },
     {
-      name: 'salesforce_search',
+      name: 'search',
       description: 'Global search across Salesforce objects (Accounts, Contacts, Opportunities, Cases, Leads).',
       inputSchema: {
         type: 'object',
@@ -50,7 +52,7 @@ await createMCPServer({
       },
     },
     {
-      name: 'salesforce_describe_object',
+      name: 'describe_object',
       description: 'Get the schema/fields of a Salesforce object.',
       inputSchema: {
         type: 'object',
@@ -61,18 +63,18 @@ await createMCPServer({
       },
     },
     {
-      name: 'salesforce_list_objects',
+      name: 'list_objects',
       description: 'List available Salesforce objects.',
       inputSchema: { type: 'object', properties: {} },
     },
   ],
   handler: async (name, args) => {
     switch (name) {
-      case 'salesforce_soql_query': return sf.soqlQuery(args.query, args.limit);
-      case 'salesforce_get_record': return sf.getRecord(args.object_type, args.record_id, args.fields);
-      case 'salesforce_search': return sf.globalSearch(args.query, args.limit);
-      case 'salesforce_describe_object': return sf.describeObject(args.object_type);
-      case 'salesforce_list_objects': return sf.listObjects();
+      case 'soql_query': return sf.soqlQuery(args.query, args.limit);
+      case 'get_record': return sf.getRecord(args.object_type, args.record_id, args.fields);
+      case 'search': return sf.globalSearch(args.query, args.limit);
+      case 'describe_object': return sf.describeObject(args.object_type);
+      case 'list_objects': return sf.listObjects();
       default: throw new Error(`Unknown tool: ${name}`);
     }
   },

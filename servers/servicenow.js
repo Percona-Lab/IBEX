@@ -14,7 +14,7 @@ await createMCPServer({
   defaultPort: 3005,
   tools: [
     {
-      name: 'servicenow_query_table',
+      name: 'query_table',
       description: 'Query a ServiceNow table with optional filters.',
       inputSchema: {
         type: 'object',
@@ -28,7 +28,7 @@ await createMCPServer({
       },
     },
     {
-      name: 'servicenow_get_record',
+      name: 'get_record',
       description: 'Get a ServiceNow record by sys_id.',
       inputSchema: {
         type: 'object',
@@ -40,16 +40,16 @@ await createMCPServer({
       },
     },
     {
-      name: 'servicenow_list_tables',
+      name: 'list_tables',
       description: 'List common ServiceNow tables.',
       inputSchema: { type: 'object', properties: {} },
     },
   ],
   handler: async (name, args) => {
     switch (name) {
-      case 'servicenow_query_table': return snow.queryTable(args.table, args.query, args.fields, args.limit);
-      case 'servicenow_get_record': return snow.getRecord(args.table, args.sys_id);
-      case 'servicenow_list_tables': return snow.listTables();
+      case 'query_table': return snow.queryTable(args.table, args.query, args.fields, args.limit);
+      case 'get_record': return snow.getRecord(args.table, args.sys_id);
+      case 'list_tables': return snow.listTables();
       default: throw new Error(`Unknown tool: ${name}`);
     }
   },

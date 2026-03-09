@@ -305,7 +305,7 @@ build_mcp_connections() {
     local id=$3
     local desc=$4
     [ "$first" = true ] || json+=","
-    json+="{\"url\":\"http://host.docker.internal:${port}/mcp\",\"path\":\"\",\"type\":\"mcp\",\"auth_type\":\"none\",\"key\":\"\",\"config\":{\"enable\":true,\"access_grants\":[{\"principal_type\":\"user\",\"principal_id\":\"*\",\"permission\":\"read\"}]},\"info\":{\"id\":\"${id}\",\"name\":\"${name}\",\"description\":\"${desc}\"}}"
+    json+="{\"url\":\"http://host.docker.internal:${port}/sse\",\"path\":\"\",\"type\":\"sse\",\"auth_type\":\"none\",\"key\":\"\",\"config\":{\"enable\":true,\"access_grants\":[{\"principal_type\":\"user\",\"principal_id\":\"*\",\"permission\":\"read\"}]},\"info\":{\"id\":\"${id}\",\"name\":\"${name}\",\"description\":\"${desc}\"}}"
     first=false
   }
 
@@ -737,48 +737,48 @@ start_and_show() {
   local started=0
 
   if [ -n "${SLACK_TOKEN:-}" ]; then
-    node "$IBEX_DIR/servers/slack.js" --http &
-    printf "  ${GREEN}✓${NC} Slack        → http://localhost:3001/mcp\n"
+    node "$IBEX_DIR/servers/slack.js" --sse-only &
+    printf "  ${GREEN}✓${NC} Slack        → http://localhost:3001/sse\n"
     started=$((started + 1))
   else
     printf "  ${RED}✗${NC} Slack        (not configured)\n"
   fi
 
   if [ -n "${NOTION_TOKEN:-}" ]; then
-    node "$IBEX_DIR/servers/notion.js" --http &
-    printf "  ${GREEN}✓${NC} Notion       → http://localhost:3002/mcp\n"
+    node "$IBEX_DIR/servers/notion.js" --sse-only &
+    printf "  ${GREEN}✓${NC} Notion       → http://localhost:3002/sse\n"
     started=$((started + 1))
   else
     printf "  ${RED}✗${NC} Notion       (not configured)\n"
   fi
 
   if [ -n "${JIRA_DOMAIN:-}" ] && [ -n "${JIRA_EMAIL:-}" ] && [ -n "${JIRA_API_TOKEN:-}" ]; then
-    node "$IBEX_DIR/servers/jira.js" --http &
-    printf "  ${GREEN}✓${NC} Jira         → http://localhost:3003/mcp\n"
+    node "$IBEX_DIR/servers/jira.js" --sse-only &
+    printf "  ${GREEN}✓${NC} Jira         → http://localhost:3003/sse\n"
     started=$((started + 1))
   else
     printf "  ${RED}✗${NC} Jira         (not configured)\n"
   fi
 
   if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_OWNER:-}" ] && [ -n "${GITHUB_REPO:-}" ]; then
-    node "$IBEX_DIR/servers/memory.js" --http &
-    printf "  ${GREEN}✓${NC} Memory       → http://localhost:3004/mcp\n"
+    node "$IBEX_DIR/servers/memory.js" --sse-only &
+    printf "  ${GREEN}✓${NC} Memory       → http://localhost:3004/sse\n"
     started=$((started + 1))
   else
     printf "  ${RED}✗${NC} Memory       (not configured)\n"
   fi
 
   if [ -n "${SERVICENOW_INSTANCE:-}" ] && [ -n "${SERVICENOW_USERNAME:-}" ] && [ -n "${SERVICENOW_PASSWORD:-}" ]; then
-    node "$IBEX_DIR/servers/servicenow.js" --http &
-    printf "  ${GREEN}✓${NC} ServiceNow   → http://localhost:3005/mcp\n"
+    node "$IBEX_DIR/servers/servicenow.js" --sse-only &
+    printf "  ${GREEN}✓${NC} ServiceNow   → http://localhost:3005/sse\n"
     started=$((started + 1))
   else
     printf "  ${RED}✗${NC} ServiceNow   (not configured)\n"
   fi
 
   if [ -n "${SALESFORCE_INSTANCE_URL:-}" ] && [ -n "${SALESFORCE_ACCESS_TOKEN:-}" ]; then
-    node "$IBEX_DIR/servers/salesforce.js" --http &
-    printf "  ${GREEN}✓${NC} Salesforce   → http://localhost:3006/mcp\n"
+    node "$IBEX_DIR/servers/salesforce.js" --sse-only &
+    printf "  ${GREEN}✓${NC} Salesforce   → http://localhost:3006/sse\n"
     started=$((started + 1))
   else
     printf "  ${RED}✗${NC} Salesforce   (not configured)\n"

@@ -10,7 +10,7 @@ await createMCPServer({
   defaultPort: 3002,
   tools: [
     {
-      name: 'notion_search',
+      name: 'search',
       description: 'Search Notion pages and databases.',
       inputSchema: {
         type: 'object',
@@ -22,7 +22,7 @@ await createMCPServer({
       },
     },
     {
-      name: 'notion_get_page',
+      name: 'get_page',
       description: 'Get a Notion page with all content.',
       inputSchema: {
         type: 'object',
@@ -33,7 +33,7 @@ await createMCPServer({
       },
     },
     {
-      name: 'notion_get_block_children',
+      name: 'get_block_children',
       description: 'Get child blocks of a Notion block or page.',
       inputSchema: {
         type: 'object',
@@ -45,7 +45,7 @@ await createMCPServer({
       },
     },
     {
-      name: 'notion_query_database',
+      name: 'query_database',
       description: 'Query a Notion database with filters and sorting.',
       inputSchema: {
         type: 'object',
@@ -60,10 +60,10 @@ await createMCPServer({
   ],
   handler: async (name, args) => {
     switch (name) {
-      case 'notion_search': return notion.search(args.query, args.filter);
-      case 'notion_get_page': return notion.getPage(args.page_id);
-      case 'notion_get_block_children': return notion.getBlockChildren(args.block_id, args.recursive);
-      case 'notion_query_database': return notion.queryDatabase(args.database_id, args.filter, args.sorts);
+      case 'search': return notion.search(args.query, args.filter);
+      case 'get_page': return notion.getPage(args.page_id);
+      case 'get_block_children': return notion.getBlockChildren(args.block_id, args.recursive);
+      case 'query_database': return notion.queryDatabase(args.database_id, args.filter, args.sorts);
       default: throw new Error(`Unknown tool: ${name}`);
     }
   },

@@ -11,7 +11,7 @@ await createMCPServer({
   defaultPort: 3001,
   tools: [
     {
-      name: 'slack_search_messages',
+      name: 'search_messages',
       description: 'Search Slack messages across all channels.',
       inputSchema: {
         type: 'object',
@@ -23,7 +23,7 @@ await createMCPServer({
       },
     },
     {
-      name: 'slack_get_channel_history',
+      name: 'get_channel_history',
       description: 'Get recent messages from a Slack channel.',
       inputSchema: {
         type: 'object',
@@ -35,7 +35,7 @@ await createMCPServer({
       },
     },
     {
-      name: 'slack_list_channels',
+      name: 'list_channels',
       description: 'List Slack channels and their IDs.',
       inputSchema: {
         type: 'object',
@@ -45,7 +45,7 @@ await createMCPServer({
       },
     },
     {
-      name: 'slack_get_thread',
+      name: 'get_thread',
       description: 'Get all replies in a Slack thread.',
       inputSchema: {
         type: 'object',
@@ -59,10 +59,10 @@ await createMCPServer({
   ],
   handler: async (name, args) => {
     switch (name) {
-      case 'slack_search_messages': return slack.searchMessages(args.query, args.count);
-      case 'slack_get_channel_history': return slack.getChannelHistory(args.channel_id, args.limit);
-      case 'slack_list_channels': return slack.listChannels(args.types);
-      case 'slack_get_thread': return slack.getThread(args.channel_id, args.thread_ts);
+      case 'search_messages': return slack.searchMessages(args.query, args.count);
+      case 'get_channel_history': return slack.getChannelHistory(args.channel_id, args.limit);
+      case 'list_channels': return slack.listChannels(args.types);
+      case 'get_thread': return slack.getThread(args.channel_id, args.thread_ts);
       default: throw new Error(`Unknown tool: ${name}`);
     }
   },

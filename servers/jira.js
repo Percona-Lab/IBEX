@@ -14,7 +14,7 @@ await createMCPServer({
   defaultPort: 3003,
   tools: [
     {
-      name: 'jira_search_issues',
+      name: 'search_issues',
       description: 'Search Jira issues using JQL.',
       inputSchema: {
         type: 'object',
@@ -26,7 +26,7 @@ await createMCPServer({
       },
     },
     {
-      name: 'jira_get_issue',
+      name: 'get_issue',
       description: 'Get details of a Jira issue.',
       inputSchema: {
         type: 'object',
@@ -37,16 +37,16 @@ await createMCPServer({
       },
     },
     {
-      name: 'jira_get_projects',
+      name: 'get_projects',
       description: 'List accessible Jira projects.',
       inputSchema: { type: 'object', properties: {} },
     },
   ],
   handler: async (name, args) => {
     switch (name) {
-      case 'jira_search_issues': return jira.searchIssues(args.jql, args.max_results);
-      case 'jira_get_issue': return jira.getIssue(args.issue_key);
-      case 'jira_get_projects': return jira.getProjects();
+      case 'search_issues': return jira.searchIssues(args.jql, args.max_results);
+      case 'get_issue': return jira.getIssue(args.issue_key);
+      case 'get_projects': return jira.getProjects();
       default: throw new Error(`Unknown tool: ${name}`);
     }
   },

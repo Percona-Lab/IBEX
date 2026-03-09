@@ -142,31 +142,31 @@ Open http://localhost:8080 and create your admin account.
 The installer pre-configures this automatically via the `TOOL_SERVER_CONNECTIONS` environment variable. For manual setup:
 
 1. In Open WebUI, go to **Settings → External Tools**
-2. Add each server — set Type to **MCP (Streamable HTTP)**, Auth to **None**:
+2. Add each server — set Type to **SSE**, Auth to **None**:
 
 | Server | URL |
 |--------|-----|
-| Slack | `http://host.docker.internal:3001/mcp` |
-| Notion | `http://host.docker.internal:3002/mcp` |
-| Jira | `http://host.docker.internal:3003/mcp` |
-| Memory | `http://host.docker.internal:3004/mcp` |
-| ServiceNow | `http://host.docker.internal:3005/mcp` |
-| Salesforce | `http://host.docker.internal:3006/mcp` |
+| Slack | `http://host.docker.internal:3001/sse` |
+| Notion | `http://host.docker.internal:3002/sse` |
+| Jira | `http://host.docker.internal:3003/sse` |
+| Memory | `http://host.docker.internal:3004/sse` |
+| ServiceNow | `http://host.docker.internal:3005/sse` |
+| Salesforce | `http://host.docker.internal:3006/sse` |
 
 ### Running servers individually
 
 ```bash
 cd ~/IBEX
 
-node servers/slack.js --http            # port 3001
-node servers/notion.js --http           # port 3002
-node servers/jira.js --http             # port 3003
-node servers/memory.js --http           # port 3004
-node servers/servicenow.js --http      # port 3005
-node servers/salesforce.js --http      # port 3006
+node servers/slack.js --sse-only            # port 3001
+node servers/notion.js --sse-only           # port 3002
+node servers/jira.js --sse-only             # port 3003
+node servers/memory.js --sse-only           # port 3004
+node servers/servicenow.js --sse-only      # port 3005
+node servers/salesforce.js --sse-only      # port 3006
 ```
 
-Override the port: `MCP_SSE_PORT=4000 node servers/slack.js --http`
+Override the port: `MCP_SSE_PORT=4000 node servers/slack.js --sse-only`
 
 Verify a server is running: `curl http://localhost:3001/health`
 
@@ -175,7 +175,7 @@ Verify a server is running: `curl http://localhost:3001/health`
 `server.js` runs all tools in a single server:
 
 ```bash
-node server.js --http    # all tools on port 3001
+node server.js --sse-only    # all tools on port 3001
 ```
 
 ## Server Modes
@@ -184,9 +184,9 @@ All servers support three transport modes:
 
 | Mode | Flag | Use Case |
 |------|------|----------|
-| Streamable HTTP | `--http` | Open WebUI and modern MCP clients |
+| SSE | `--sse-only` | Open WebUI and most MCP clients |
+| Streamable HTTP | `--http` | Modern MCP clients that support it |
 | stdio | *(none)* | Claude Desktop and other stdio-based MCP clients |
-| Legacy SSE | `--sse-only` | Older MCP clients |
 
 ## Notion Indexer (Optional)
 
