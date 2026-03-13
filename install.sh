@@ -90,11 +90,11 @@ want to use. You can skip any connector you don't need.
               → Permissions: Contents → Read and write
 
  OPEN WEBUI   Requires Docker Desktop (will be installed if missing)
+              → Local LLM (recommended, no VPN needed):
+                Installs LM Studio + downloads a model automatically
               → Percona internal LLM servers (requires VPN):
                 LM Studio: mac-studio-lm.int.percona.com
                 Ollama:    mac-studio-ollama.int.percona.com
-              → Requires Percona VPN connection
-              → Or use a local server (LM Studio, Ollama, etc.)
 
 You only need credentials for the connectors you plan to use.
 ============================================================
@@ -275,8 +275,8 @@ configure_credentials() {
   echo " Configuring connectors..."
   echo "============================================================"
 
-  # Delegate to configure.sh
-  bash "$IBEX_DIR/configure.sh"
+  # Delegate to configure.sh (skip Open WebUI update — install.sh handles it later in configure_models)
+  bash "$IBEX_DIR/configure.sh" --install-mode
 }
 
 # ── Phase 5: Open WebUI Docker Setup ───────────────────────
@@ -285,6 +285,112 @@ configure_credentials() {
 PERCONA_LM_URL="https://mac-studio-lm.int.percona.com/v1"
 PERCONA_OLLAMA_URL="https://mac-studio-ollama.int.percona.com"
 PERCONA_DEFAULT_MODEL="qwen3-coder-30"
+
+# Local LM Studio config
+LOCAL_LM_PORT=1234
+LOCAL_DEFAULT_MODEL="qwen3.5-35b-a3b"
+LOCAL_LARGE_MODEL="qwen3-32b"
+
+setup_local_lm_studio() {
+  # Install LM Studio and download models for local inference
+  # Returns 0 on success, 1 on failure
+
+  local lms_available=false
+
+  # Check if lms CLI is available
+  if command -v lms &>/dev/null; then
+    lms_available=true
+    printf "  ${GREEN}✓${NC} LM Studio CLI found\n"
+  else
+    # Check if LM Studio app is installed but CLI not bootstrapped
+    if [ -d "/Applications/LM Studio.app" ] || [ -d "$HOME/Applications/LM Studio.app" ]; then
+      printf "  ${YELLOW}!${NC} LM Studio app found but CLI not in PATH\n"
+      echo "  Bootstrapping lms CLI..."
+      if "$( [ -d "/Applications/LM Studio.app" ] && echo "/Applications/LM Studio.app" || echo "$HOME/Applications/LM Studio.app" )/Contents/Resources/bin/lms" bootstrap 2>/dev/null; then
+        # Refresh PATH
+        export PATH="$HOME/.lmstudio/bin:$PATH"
+        lms_available=true
+        printf "  ${GREEN}✓${NC} LM Studio CLI bootstrapped\n"
+      fi
+    fi
+  fi
+
+  if ! $lms_available; then
+    echo ""
+    echo "  LM Studio is not installed. Installing now..."
+    echo "  (This downloads the LM Studio app and CLI)"
+    echo ""
+
+    if curl -fsSL https://lmstudio.ai/install.sh | bash 2>&1 | sed 's/^/  /'; then
+      # Add to PATH for this session
+      export PATH="$HOME/.lmstudio/bin:$PATH"
+      if command -v lms &>/dev/null; then
+        lms_available=true
+        printf "\n  ${GREEN}✓${NC} LM Studio installed\n"
+      else
+        printf "\n  ${RED}✗${NC} LM Studio installed but CLI not found in PATH\n"
+        echo "  Try restarting your terminal and running install.sh again."
+        return 1
+      fi
+    else
+      printf "\n  ${RED}✗${NC} LM Studio installation failed\n"
+      echo "  Install manually from: https://lmstudio.ai"
+      return 1
+    fi
+  fi
+
+  # Download the default model
+  echo ""
+  echo "  Downloading model: $LOCAL_DEFAULT_MODEL"
+  echo "  Fast MoE model (35B total, 3B active) optimized for tool calling."
+  echo "  Download size: ~21 GB (Q4) — may vary based on your hardware."
+  echo ""
+
+  if lms get "$LOCAL_DEFAULT_MODEL" 2>&1 | sed 's/^/  /'; then
+    printf "\n  ${GREEN}✓${NC} Model downloaded: %s\n" "$LOCAL_DEFAULT_MODEL"
+  else
+    printf "\n  ${RED}✗${NC} Failed to download model\n"
+    echo "  You can download it later: lms get $LOCAL_DEFAULT_MODEL"
+    return 1
+  fi
+
+  # Offer a larger model
+  echo ""
+  echo "  Optional: also download a dense model for stronger reasoning."
+  echo "  $LOCAL_LARGE_MODEL activates all 32B parameters (slower but smarter, ~20 GB)."
+  echo ""
+  if ask_yn "  Download $LOCAL_LARGE_MODEL as well?"; then
+    echo ""
+    if lms get "$LOCAL_LARGE_MODEL" 2>&1 | sed 's/^/  /'; then
+      printf "\n  ${GREEN}✓${NC} Model downloaded: %s\n" "$LOCAL_LARGE_MODEL"
+    else
+      printf "\n  ${YELLOW}!${NC} Failed to download %s (non-critical)\n" "$LOCAL_LARGE_MODEL"
+    fi
+  fi
+
+  # Start the LM Studio server
+  echo ""
+  echo "  Starting LM Studio server on port $LOCAL_LM_PORT..."
+
+  # Check if server is already running
+  if curl -sf --connect-timeout 2 "http://localhost:${LOCAL_LM_PORT}/v1/models" >/dev/null 2>&1; then
+    printf "  ${GREEN}✓${NC} LM Studio server already running on port %s\n" "$LOCAL_LM_PORT"
+  else
+    if lms server start --port "$LOCAL_LM_PORT" 2>&1 | sed 's/^/  /'; then
+      sleep 2
+      if curl -sf --connect-timeout 5 "http://localhost:${LOCAL_LM_PORT}/v1/models" >/dev/null 2>&1; then
+        printf "  ${GREEN}✓${NC} LM Studio server started on port %s\n" "$LOCAL_LM_PORT"
+      else
+        printf "  ${YELLOW}!${NC} Server started but not yet responding — it may need a moment\n"
+      fi
+    else
+      printf "  ${YELLOW}!${NC} Could not auto-start server\n"
+      echo "  Start it manually: lms server start"
+    fi
+  fi
+
+  return 0
+}
 
 build_mcp_connections() {
   # Build TOOL_SERVER_CONNECTIONS JSON from configured credentials
@@ -305,7 +411,7 @@ build_mcp_connections() {
     local id=$3
     local desc=$4
     [ "$first" = true ] || json+=","
-    json+="{\"url\":\"http://host.docker.internal:${port}/sse\",\"path\":\"\",\"type\":\"sse\",\"auth_type\":\"none\",\"key\":\"\",\"config\":{\"enable\":true,\"access_grants\":[{\"principal_type\":\"user\",\"principal_id\":\"*\",\"permission\":\"read\"}]},\"info\":{\"id\":\"${id}\",\"name\":\"${name}\",\"description\":\"${desc}\"}}"
+    json+="{\"url\":\"http://host.docker.internal:${port}/mcp\",\"path\":\"\",\"type\":\"mcp\",\"auth_type\":\"none\",\"key\":\"\",\"config\":{\"enable\":true,\"access_grants\":[{\"principal_type\":\"user\",\"principal_id\":\"*\",\"permission\":\"read\"}]},\"info\":{\"id\":\"${id}\",\"name\":\"${name}\",\"description\":\"${desc}\"}}"
     first=false
   }
 
@@ -368,14 +474,15 @@ setup_docker() {
     while true; do
     echo "  Which LLM backend should Open WebUI connect to?"
     echo ""
-    echo "    1) Percona internal servers (recommended — requires VPN)"
+    echo "    1) Local LLM (recommended — no VPN needed)"
+    echo "       Installs LM Studio + downloads qwen3.5-35b-a3b (~21 GB)"
+    echo ""
+    echo "    2) Percona internal servers (requires VPN)"
     echo "       LM Studio + Ollama models on Percona network"
     echo ""
-    echo "    2) Local LLM server (LM Studio, Ollama, etc. on this Mac)"
+    echo "    3) Both — local + Percona internal servers"
     echo ""
-    echo "    3) Both — Percona internal + local server"
-    echo ""
-    echo "    4) Skip (configure later in Open WebUI → Settings → Connections)"
+    echo "    4) Custom / Skip (configure later)"
     echo ""
 
     printf "  Choose [1]: "
@@ -384,6 +491,22 @@ setup_docker() {
 
     case "$backend_choice" in
       1)
+        echo ""
+        if setup_local_lm_studio; then
+          openai_url="http://host.docker.internal:${LOCAL_LM_PORT}/v1"
+          openai_key="dummy"
+          default_model="$LOCAL_DEFAULT_MODEL"
+          printf "\n  ${GREEN}✓${NC} Using local LM Studio server\n"
+          printf "  ${GREEN}✓${NC} Default model: %s\n" "$default_model"
+        else
+          printf "\n  ${RED}✗${NC} Local LM Studio setup failed\n"
+          printf "    You can set up LM Studio manually later.\n\n"
+          read -rp "  Press Enter to go back to LLM selection..."
+          continue
+        fi
+        break
+        ;;
+      2)
         echo ""
         printf "  Checking VPN connection..."
         if curl -sf --connect-timeout 5 "$PERCONA_LM_URL/models" >/dev/null 2>&1; then
@@ -404,23 +527,14 @@ setup_docker() {
         printf "  ${GREEN}✓${NC} Default model: %s\n" "$default_model"
         break
         ;;
-      2)
-        echo ""
-        local llm_host
-        llm_host=$(prompt_value "LLM server address" "localhost")
-        local llm_port
-        llm_port=$(prompt_value "LLM server port" "1234")
-
-        if [ "$llm_host" = "localhost" ] || [ "$llm_host" = "127.0.0.1" ]; then
-          openai_url="http://host.docker.internal:${llm_port}/v1"
-        else
-          openai_url="http://${llm_host}:${llm_port}/v1"
-        fi
-        openai_key="dummy"
-        break
-        ;;
       3)
         echo ""
+        if setup_local_lm_studio; then
+          printf "\n"
+        else
+          printf "\n  ${YELLOW}!${NC} Local setup failed — continuing with Percona servers only\n"
+        fi
+
         printf "  Checking VPN connection..."
         if curl -sf --connect-timeout 5 "$PERCONA_LM_URL/models" >/dev/null 2>&1; then
           printf " ${GREEN}connected${NC}\n"
@@ -433,20 +547,8 @@ setup_docker() {
           continue
         fi
 
-        echo ""
-        local llm_host
-        llm_host=$(prompt_value "Local LLM server address" "localhost")
-        local llm_port
-        llm_port=$(prompt_value "Local LLM server port" "1234")
-
-        local local_url
-        if [ "$llm_host" = "localhost" ] || [ "$llm_host" = "127.0.0.1" ]; then
-          local_url="http://host.docker.internal:${llm_port}/v1"
-        else
-          local_url="http://${llm_host}:${llm_port}/v1"
-        fi
-
         # Multiple OpenAI-compatible endpoints: semicolon-separated
+        local local_url="http://host.docker.internal:${LOCAL_LM_PORT}/v1"
         openai_url="${PERCONA_LM_URL};${local_url}"
         openai_key="none;dummy"
         ollama_url="$PERCONA_OLLAMA_URL"
@@ -737,48 +839,48 @@ start_and_show() {
   local started=0
 
   if [ -n "${SLACK_TOKEN:-}" ]; then
-    node "$IBEX_DIR/servers/slack.js" --sse-only &
-    printf "  ${GREEN}✓${NC} Slack        → http://localhost:3001/sse\n"
+    node "$IBEX_DIR/servers/slack.js" --http &
+    printf "  ${GREEN}✓${NC} Slack        → http://localhost:3001/mcp\n"
     started=$((started + 1))
   else
     printf "  ${RED}✗${NC} Slack        (not configured)\n"
   fi
 
   if [ -n "${NOTION_TOKEN:-}" ]; then
-    node "$IBEX_DIR/servers/notion.js" --sse-only &
-    printf "  ${GREEN}✓${NC} Notion       → http://localhost:3002/sse\n"
+    node "$IBEX_DIR/servers/notion.js" --http &
+    printf "  ${GREEN}✓${NC} Notion       → http://localhost:3002/mcp\n"
     started=$((started + 1))
   else
     printf "  ${RED}✗${NC} Notion       (not configured)\n"
   fi
 
   if [ -n "${JIRA_DOMAIN:-}" ] && [ -n "${JIRA_EMAIL:-}" ] && [ -n "${JIRA_API_TOKEN:-}" ]; then
-    node "$IBEX_DIR/servers/jira.js" --sse-only &
-    printf "  ${GREEN}✓${NC} Jira         → http://localhost:3003/sse\n"
+    node "$IBEX_DIR/servers/jira.js" --http &
+    printf "  ${GREEN}✓${NC} Jira         → http://localhost:3003/mcp\n"
     started=$((started + 1))
   else
     printf "  ${RED}✗${NC} Jira         (not configured)\n"
   fi
 
   if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_OWNER:-}" ] && [ -n "${GITHUB_REPO:-}" ]; then
-    node "$IBEX_DIR/servers/memory.js" --sse-only &
-    printf "  ${GREEN}✓${NC} Memory       → http://localhost:3004/sse\n"
+    node "$IBEX_DIR/servers/memory.js" --http &
+    printf "  ${GREEN}✓${NC} Memory       → http://localhost:3004/mcp\n"
     started=$((started + 1))
   else
     printf "  ${RED}✗${NC} Memory       (not configured)\n"
   fi
 
   if [ -n "${SERVICENOW_INSTANCE:-}" ] && [ -n "${SERVICENOW_USERNAME:-}" ] && [ -n "${SERVICENOW_PASSWORD:-}" ]; then
-    node "$IBEX_DIR/servers/servicenow.js" --sse-only &
-    printf "  ${GREEN}✓${NC} ServiceNow   → http://localhost:3005/sse\n"
+    node "$IBEX_DIR/servers/servicenow.js" --http &
+    printf "  ${GREEN}✓${NC} ServiceNow   → http://localhost:3005/mcp\n"
     started=$((started + 1))
   else
     printf "  ${RED}✗${NC} ServiceNow   (not configured)\n"
   fi
 
   if [ -n "${SALESFORCE_INSTANCE_URL:-}" ] && [ -n "${SALESFORCE_ACCESS_TOKEN:-}" ]; then
-    node "$IBEX_DIR/servers/salesforce.js" --sse-only &
-    printf "  ${GREEN}✓${NC} Salesforce   → http://localhost:3006/sse\n"
+    node "$IBEX_DIR/servers/salesforce.js" --http &
+    printf "  ${GREEN}✓${NC} Salesforce   → http://localhost:3006/mcp\n"
     started=$((started + 1))
   else
     printf "  ${RED}✗${NC} Salesforce   (not configured)\n"
