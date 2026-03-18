@@ -298,6 +298,12 @@ write_env_file() {
 
 load_config
 
+# Install mode: skip Open WebUI update (install.sh handles it later after Docker setup)
+INSTALL_MODE=false
+if [ "${1:-}" = "--install-mode" ]; then
+  INSTALL_MODE=true
+fi
+
 # Status-only mode
 if [ "${1:-}" = "--status" ]; then
   echo "============================================================"
@@ -317,6 +323,29 @@ show_status
 
 echo ""
 changed=false
+
+# Check if any connectors are already configured
+configured_list=""
+is_slack_configured && configured_list="${configured_list} Slack,"
+is_notion_configured && configured_list="${configured_list} Notion,"
+is_jira_configured && configured_list="${configured_list} Jira,"
+is_servicenow_configured && configured_list="${configured_list} ServiceNow,"
+is_salesforce_configured && configured_list="${configured_list} Salesforce,"
+is_memory_configured && configured_list="${configured_list} Memory,"
+
+if [ -n "$configured_list" ]; then
+  # Trim trailing comma
+  configured_list="${configured_list%,}"
+  echo "  Settings found for:${configured_list}"
+  echo ""
+  if ! ask_yn "  Need to change anything?"; then
+    echo ""
+    echo "  No changes made."
+    echo ""
+    if $INSTALL_MODE; then exit 0; else exit 0; fi
+  fi
+  echo ""
+fi
 
 # Iterate through each connector
 for connector in slack notion jira servicenow salesforce memory; do
@@ -368,7 +397,9 @@ if $changed; then
   echo "────────────────────────────────────────"
   echo ""
 
-  if ask_yn "  Update Open WebUI system prompt automatically?"; then
+  if $INSTALL_MODE; then
+    echo "  Open WebUI prompt will be configured after Docker setup."
+  elif ask_yn "  Update Open WebUI system prompt automatically?"; then
     echo ""
     read -rp "  Open WebUI email: " email
     read -rsp "  Open WebUI password: " password
@@ -426,9 +457,11 @@ print('ok')
     echo "  Settings → General → System Prompt"
   fi
 
-  echo ""
-  echo "Restart IBEX servers to apply changes:"
-  echo "  ~/IBEX/start.sh"
+  if ! $INSTALL_MODE; then
+    echo ""
+    echo "Restart IBEX servers to apply changes:"
+    echo "  ~/IBEX/start.sh"
+  fi
   echo ""
 else
   echo ""

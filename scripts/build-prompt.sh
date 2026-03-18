@@ -10,37 +10,96 @@ build_system_prompt() {
     set +a
   fi
 
-  local prompt="You have access to workplace tools via IBEX:"
-  prompt+="\n"
+  local prompt="You are a helpful work assistant with access to workplace tools via IBEX."
 
-  [ -n "${SLACK_TOKEN:-}" ] && \
-    prompt+="\n- Slack: search messages, read channels, list channels, read threads"
-
-  [ -n "${NOTION_TOKEN:-}" ] && \
-    prompt+="\n- Notion: search pages, read content, query databases"
-
-  [ -n "${JIRA_DOMAIN:-}" ] && [ -n "${JIRA_EMAIL:-}" ] && [ -n "${JIRA_API_TOKEN:-}" ] && \
-    prompt+="\n- Jira: search issues with JQL, read issue details and comments, list projects"
-
-  [ -n "${SERVICENOW_INSTANCE:-}" ] && [ -n "${SERVICENOW_USERNAME:-}" ] && [ -n "${SERVICENOW_PASSWORD:-}" ] && \
-    prompt+="\n- ServiceNow: query tables, get records, list tables"
-
-  [ -n "${SALESFORCE_INSTANCE_URL:-}" ] && [ -n "${SALESFORCE_ACCESS_TOKEN:-}" ] && \
-    prompt+="\n- Salesforce: run SOQL queries, get records, search across objects, describe schemas"
-
-  if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_OWNER:-}" ] && [ -n "${GITHUB_REPO:-}" ]; then
-    prompt+="\n- Memory: read/write persistent memory (GitHub-backed)"
-    prompt+="\n"
-    prompt+="\nMemory usage:"
-    prompt+="\n- Use memory_get when the user references previous context, asks \"what do you know\", or needs background on a project"
-    prompt+="\n- Use memory_update when the user says \"remember this\", \"save this\", or asks you to store any information — this is the user's personal memory and they decide what goes in it"
-    prompt+="\n- CRITICAL: Before EVERY memory_update, you MUST call memory_get first. The memory file may contain important content from other sessions. Read it, merge your changes into the existing content, then write the complete updated markdown. Never overwrite blindly."
-    prompt+="\n- Keep memory organized with ## headings and bullet points"
-    prompt+="\n- Do not call memory_get at the start of every conversation — only when context is needed"
+  # ── User identity ──────────────────────────────────────────
+  # Resolve the user's Slack identity so the model knows who "me/my" refers to
+  local slack_user="" slack_user_id=""
+  if [ -n "${SLACK_TOKEN:-}" ]; then
+    local auth_resp
+    auth_resp=$(curl -sf https://slack.com/api/auth.test \
+      -H "Authorization: Bearer $SLACK_TOKEN" 2>/dev/null)
+    if [ -n "$auth_resp" ]; then
+      slack_user=$(echo "$auth_resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('user',''))" 2>/dev/null)
+      slack_user_id=$(echo "$auth_resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('user_id',''))" 2>/dev/null)
+    fi
   fi
 
+  if [ -n "$slack_user" ]; then
+    prompt+="\nThe current user's Slack username is @${slack_user} (ID: ${slack_user_id})."
+    prompt+="\nWhen the user says \"my\" messages, search with from:@${slack_user}."
+  fi
+
+  # ── Available tools ────────────────────────────────────────
+  prompt+="\n\nAvailable tools:"
+
+  if [ -n "${SLACK_TOKEN:-}" ]; then
+    prompt+="\n"
+    prompt+="\n## Slack"
+    prompt+="\n- search_messages: Search Slack messages. The query uses Slack search syntax:"
+    prompt+="\n  - from:@username — filter by sender"
+    prompt+="\n  - in:#channel — filter by channel"
+    prompt+="\n  - \"exact phrase\" — exact match"
+    prompt+="\n  - before:YYYY-MM-DD / after:YYYY-MM-DD — date range"
+    prompt+="\n  Example: from:@${slack_user:-username} after:2025-01-01"
+    prompt+="\n- get_channel_history: Get recent messages from a channel (needs channel_id)"
+    prompt+="\n- list_channels: List channels and their IDs"
+    prompt+="\n- get_thread: Get replies in a thread (needs channel_id + thread_ts)"
+  fi
+
+  if [ -n "${NOTION_TOKEN:-}" ]; then
+    prompt+="\n"
+    prompt+="\n## Notion"
+    prompt+="\n- search: Search Notion pages by keyword"
+    prompt+="\n- get_page: Get full page content by ID"
+    prompt+="\n- query_database: Query a Notion database with filters"
+  fi
+
+  if [ -n "${JIRA_DOMAIN:-}" ] && [ -n "${JIRA_EMAIL:-}" ] && [ -n "${JIRA_API_TOKEN:-}" ]; then
+    prompt+="\n"
+    prompt+="\n## Jira"
+    prompt+="\n- search_issues: Search with JQL (e.g. assignee=currentUser() AND status!=Done)"
+    prompt+="\n- get_issue: Get issue details by key (e.g. PROJ-123)"
+    prompt+="\n- list_projects: List accessible projects"
+  fi
+
+  if [ -n "${SERVICENOW_INSTANCE:-}" ] && [ -n "${SERVICENOW_USERNAME:-}" ] && [ -n "${SERVICENOW_PASSWORD:-}" ]; then
+    prompt+="\n"
+    prompt+="\n## ServiceNow"
+    prompt+="\n- query_table: Query a table with filters"
+    prompt+="\n- get_record: Get a record by sys_id"
+    prompt+="\n- list_tables: List available tables"
+  fi
+
+  if [ -n "${SALESFORCE_INSTANCE_URL:-}" ] && [ -n "${SALESFORCE_ACCESS_TOKEN:-}" ]; then
+    prompt+="\n"
+    prompt+="\n## Salesforce"
+    prompt+="\n- soql_query: Run a SOQL query"
+    prompt+="\n- get_record: Get a record by ID"
+    prompt+="\n- search: Search across objects"
+    prompt+="\n- describe: Describe an object schema"
+  fi
+
+  if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_OWNER:-}" ] && [ -n "${GITHUB_REPO:-}" ]; then
+    prompt+="\n"
+    prompt+="\n## Memory"
+    prompt+="\n- memory_get: Read stored memory (GitHub-backed)"
+    prompt+="\n- memory_update: Write to memory"
+    prompt+="\n"
+    prompt+="\nMemory rules:"
+    prompt+="\n- Use memory_get when the user references previous context or asks \"what do you know\""
+    prompt+="\n- Use memory_update when the user says \"remember this\" or \"save this\""
+    prompt+="\n- CRITICAL: Before EVERY memory_update, call memory_get first to avoid overwriting existing content"
+    prompt+="\n- Keep memory organized with ## headings and bullet points"
+  fi
+
+  # ── General instructions ───────────────────────────────────
   prompt+="\n"
-  prompt+="\nWhen the user asks about their work data (messages, tickets, pages, records), ALWAYS use the relevant tool to look it up. Never guess or answer from memory — the tools have real-time access to live data. If the user asks about a system not listed here, let them know that connector is not configured."
+  prompt+="\nInstructions:"
+  prompt+="\n- When the user asks about their work data, ALWAYS use the relevant tool. Never guess."
+  prompt+="\n- When the user says \"my\" messages/tickets/etc, filter for the current user."
+  prompt+="\n- Keep responses concise and well-formatted."
+  prompt+="\n- If a tool is not listed above, tell the user that connector is not configured."
 
   echo -e "$prompt"
 }

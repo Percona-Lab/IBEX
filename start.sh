@@ -38,48 +38,48 @@ echo ""
 started=0
 
 if [ -n "${SLACK_TOKEN:-}" ]; then
-  node servers/slack.js --sse-only &
-  printf "  ${GREEN}✓${NC} Slack        → http://localhost:3001/sse\n"
+  node servers/slack.js --http &
+  printf "  ${GREEN}✓${NC} Slack        → http://localhost:3001/mcp\n"
   started=$((started + 1))
 else
   printf "  ${RED}✗${NC} Slack        (SLACK_TOKEN not configured)\n"
 fi
 
 if [ -n "${NOTION_TOKEN:-}" ]; then
-  node servers/notion.js --sse-only &
-  printf "  ${GREEN}✓${NC} Notion       → http://localhost:3002/sse\n"
+  node servers/notion.js --http &
+  printf "  ${GREEN}✓${NC} Notion       → http://localhost:3002/mcp\n"
   started=$((started + 1))
 else
   printf "  ${RED}✗${NC} Notion       (NOTION_TOKEN not configured)\n"
 fi
 
 if [ -n "${JIRA_DOMAIN:-}" ] && [ -n "${JIRA_EMAIL:-}" ] && [ -n "${JIRA_API_TOKEN:-}" ]; then
-  node servers/jira.js --sse-only &
-  printf "  ${GREEN}✓${NC} Jira         → http://localhost:3003/sse\n"
+  node servers/jira.js --http &
+  printf "  ${GREEN}✓${NC} Jira         → http://localhost:3003/mcp\n"
   started=$((started + 1))
 else
   printf "  ${RED}✗${NC} Jira         (JIRA credentials not configured)\n"
 fi
 
 if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_OWNER:-}" ] && [ -n "${GITHUB_REPO:-}" ]; then
-  node servers/memory.js --sse-only &
-  printf "  ${GREEN}✓${NC} Memory       → http://localhost:3004/sse\n"
+  node servers/memory.js --http &
+  printf "  ${GREEN}✓${NC} Memory       → http://localhost:3004/mcp\n"
   started=$((started + 1))
 else
   printf "  ${RED}✗${NC} Memory       (GITHUB credentials not configured)\n"
 fi
 
 if [ -n "${SERVICENOW_INSTANCE:-}" ] && [ -n "${SERVICENOW_USERNAME:-}" ] && [ -n "${SERVICENOW_PASSWORD:-}" ]; then
-  node servers/servicenow.js --sse-only &
-  printf "  ${GREEN}✓${NC} ServiceNow   → http://localhost:3005/sse\n"
+  node servers/servicenow.js --http &
+  printf "  ${GREEN}✓${NC} ServiceNow   → http://localhost:3005/mcp\n"
   started=$((started + 1))
 else
   printf "  ${RED}✗${NC} ServiceNow   (SERVICENOW credentials not configured)\n"
 fi
 
 if [ -n "${SALESFORCE_INSTANCE_URL:-}" ] && [ -n "${SALESFORCE_ACCESS_TOKEN:-}" ]; then
-  node servers/salesforce.js --sse-only &
-  printf "  ${GREEN}✓${NC} Salesforce   → http://localhost:3006/sse\n"
+  node servers/salesforce.js --http &
+  printf "  ${GREEN}✓${NC} Salesforce   → http://localhost:3006/mcp\n"
   started=$((started + 1))
 else
   printf "  ${RED}✗${NC} Salesforce   (SALESFORCE credentials not configured)\n"

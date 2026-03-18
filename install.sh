@@ -214,56 +214,23 @@ install_ibex() {
   echo "============================================================"
   echo ""
 
-  # Detect if running from an extracted zip (no .git directory)
   local script_dir
   script_dir="$(cd "$(dirname "$0")" && pwd)"
+  IBEX_DIR="$HOME/IBEX"
 
-  if [ -f "$script_dir/package.json" ] && [ ! -d "$script_dir/.git" ]; then
-    # Running from extracted zip — use this directory
-    IBEX_DIR="$script_dir"
-    if [ "$IBEX_DIR" != "$HOME/IBEX" ]; then
-      # Move to ~/IBEX if not already there
-      if [ -d "$HOME/IBEX" ]; then
-        printf "  ${YELLOW}!${NC} ~/IBEX already exists\n"
-        if ask_yn "  Replace with this copy?" "y"; then
-          rm -rf "$HOME/IBEX"
-          cp -R "$IBEX_DIR" "$HOME/IBEX"
-          IBEX_DIR="$HOME/IBEX"
-        fi
-      else
-        cp -R "$IBEX_DIR" "$HOME/IBEX"
-        IBEX_DIR="$HOME/IBEX"
-      fi
+  # If running from a different directory (e.g. ~/Downloads/IBEX), copy to ~/IBEX
+  if [ "$script_dir" != "$IBEX_DIR" ] && [ -f "$script_dir/package.json" ]; then
+    if [ -d "$IBEX_DIR" ]; then
+      printf "  ${YELLOW}!${NC} ~/IBEX already exists — replacing with new version\n"
+      # Preserve credentials file
+      rm -rf "$IBEX_DIR"
     fi
-    cd "$IBEX_DIR"
-    npm install
-    printf "  ${GREEN}✓${NC} Installed from zip\n"
-  elif [ -d "$HOME/IBEX/.git" ]; then
-    # Existing git clone
-    IBEX_DIR="$HOME/IBEX"
-    printf "  ${GREEN}✓${NC} IBEX directory exists at %s\n" "$IBEX_DIR"
-    if ask_yn "  Update to latest version? (git pull && npm install)" "y"; then
-      cd "$IBEX_DIR"
-      git pull
-      npm install
-      printf "  ${GREEN}✓${NC} Updated\n"
-    else
-      cd "$IBEX_DIR"
-      echo "  Skipped update"
-    fi
-  else
-    # Fresh clone
-    IBEX_DIR="$HOME/IBEX"
-    echo "  Cloning IBEX to $IBEX_DIR..."
-    if command -v gh &>/dev/null; then
-      gh repo clone Percona-Lab/IBEX "$IBEX_DIR"
-    else
-      git clone https://github.com/Percona-Lab/IBEX.git "$IBEX_DIR"
-    fi
-    cd "$IBEX_DIR"
-    npm install
-    printf "  ${GREEN}✓${NC} Installed\n"
+    cp -R "$script_dir" "$IBEX_DIR"
   fi
+
+  cd "$IBEX_DIR"
+  npm install
+  printf "  ${GREEN}✓${NC} Installed at %s\n" "$IBEX_DIR"
 
   echo ""
 }
@@ -288,8 +255,9 @@ PERCONA_DEFAULT_MODEL="qwen3-coder-30"
 
 # Local LM Studio config
 LOCAL_LM_PORT=1234
-LOCAL_DEFAULT_MODEL="qwen3.5-35b-a3b"
-LOCAL_LARGE_MODEL="qwen3-32b"
+LOCAL_MODEL_LARGE="qwen3.5-35b-a3b"   # MoE 35B/3B active, ~22 GB Q4 — needs 32 GB+ RAM
+LOCAL_MODEL_SMALL="qwen3-14b"          # Dense 14B, ~9 GB Q4 — fits 16-31 GB RAM
+LOCAL_SELECTED_MODEL=""                # Set by setup_local_lm_studio based on RAM
 
 setup_local_lm_studio() {
   # Install LM Studio and download models for local inference
@@ -339,33 +307,35 @@ setup_local_lm_studio() {
     fi
   fi
 
-  # Download the default model
-  echo ""
-  echo "  Downloading model: $LOCAL_DEFAULT_MODEL"
-  echo "  Fast MoE model (35B total, 3B active) optimized for tool calling."
-  echo "  Download size: ~21 GB (Q4) — may vary based on your hardware."
+  # Select model based on system RAM
+  local total_ram_gb
+  total_ram_gb=$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%d", $1/1073741824}')
+
+  if [ "${total_ram_gb:-0}" -lt 16 ]; then
+    printf "\n  ${RED}✗${NC} Your Mac has %s GB RAM. Local models require at least 16 GB.\n" "$total_ram_gb"
+    echo "  Consider using the Percona server option instead."
+    return 1
+  elif [ "${total_ram_gb:-0}" -ge 32 ]; then
+    LOCAL_SELECTED_MODEL="$LOCAL_MODEL_LARGE"
+    echo ""
+    echo "  Detected ${total_ram_gb} GB RAM."
+    echo "  Downloading model: $LOCAL_SELECTED_MODEL"
+    echo "  Fast MoE model (35B total, 3B active) optimized for tool calling (~22 GB)."
+  else
+    LOCAL_SELECTED_MODEL="$LOCAL_MODEL_SMALL"
+    echo ""
+    echo "  Detected ${total_ram_gb} GB RAM."
+    echo "  Downloading model: $LOCAL_SELECTED_MODEL"
+    echo "  Dense 14B model optimized for tool calling (~9 GB)."
+  fi
   echo ""
 
-  if lms get "$LOCAL_DEFAULT_MODEL" 2>&1 | sed 's/^/  /'; then
-    printf "\n  ${GREEN}✓${NC} Model downloaded: %s\n" "$LOCAL_DEFAULT_MODEL"
+  if lms get "$LOCAL_SELECTED_MODEL" --yes 2>&1 | sed 's/^/  /'; then
+    printf "\n  ${GREEN}✓${NC} Model downloaded: %s\n" "$LOCAL_SELECTED_MODEL"
   else
     printf "\n  ${RED}✗${NC} Failed to download model\n"
-    echo "  You can download it later: lms get $LOCAL_DEFAULT_MODEL"
+    echo "  You can download it later: lms get $LOCAL_SELECTED_MODEL"
     return 1
-  fi
-
-  # Offer a larger model
-  echo ""
-  echo "  Optional: also download a dense model for stronger reasoning."
-  echo "  $LOCAL_LARGE_MODEL activates all 32B parameters (slower but smarter, ~20 GB)."
-  echo ""
-  if ask_yn "  Download $LOCAL_LARGE_MODEL as well?"; then
-    echo ""
-    if lms get "$LOCAL_LARGE_MODEL" 2>&1 | sed 's/^/  /'; then
-      printf "\n  ${GREEN}✓${NC} Model downloaded: %s\n" "$LOCAL_LARGE_MODEL"
-    else
-      printf "\n  ${YELLOW}!${NC} Failed to download %s (non-critical)\n" "$LOCAL_LARGE_MODEL"
-    fi
   fi
 
   # Start the LM Studio server
@@ -442,25 +412,16 @@ setup_docker() {
   echo "============================================================"
   echo ""
 
-  # Check if container already exists
+  # Always remove existing container — env vars are baked in at creation time
+  # and must be recreated to pick up new LLM/MCP settings.
+  # We keep ~/open-webui-data/cache/ to avoid re-downloading the embedding model.
   if docker ps -a --format '{{.Names}}' | grep -q '^open-webui$'; then
-    printf "  ${GREEN}✓${NC} Open WebUI container already exists\n"
-    if docker ps --format '{{.Names}}' | grep -q '^open-webui$'; then
-      printf "  ${GREEN}✓${NC} Open WebUI is running\n"
-    else
-      echo "  Starting existing container..."
-      docker start open-webui
-      printf "  ${GREEN}✓${NC} Open WebUI started\n"
-    fi
-
-    if ask_yn "  Recreate container with new settings?"; then
-      echo "  Stopping and removing existing container..."
-      docker stop open-webui 2>/dev/null || true
-      docker rm open-webui 2>/dev/null || true
-    else
-      echo ""
-      return
-    fi
+    echo "  Removing old Open WebUI container..."
+    docker stop open-webui 2>/dev/null || true
+    docker rm open-webui 2>/dev/null || true
+    # Remove database (forces fresh account) but keep cached models
+    rm -f "$HOME/open-webui-data/webui.db"
+    printf "  ${GREEN}✓${NC} Old container removed\n"
   fi
 
   # Only reach here if container doesn't exist or user chose to recreate
@@ -475,7 +436,7 @@ setup_docker() {
     echo "  Which LLM backend should Open WebUI connect to?"
     echo ""
     echo "    1) Local LLM (recommended — no VPN needed)"
-    echo "       Installs LM Studio + downloads qwen3.5-35b-a3b (~21 GB)"
+    echo "       Installs LM Studio + downloads a model (requires 16 GB+ RAM)"
     echo ""
     echo "    2) Percona internal servers (requires VPN)"
     echo "       LM Studio + Ollama models on Percona network"
@@ -495,7 +456,7 @@ setup_docker() {
         if setup_local_lm_studio; then
           openai_url="http://host.docker.internal:${LOCAL_LM_PORT}/v1"
           openai_key="dummy"
-          default_model="$LOCAL_DEFAULT_MODEL"
+          default_model="$LOCAL_SELECTED_MODEL"
           printf "\n  ${GREEN}✓${NC} Using local LM Studio server\n"
           printf "  ${GREEN}✓${NC} Default model: %s\n" "$default_model"
         else
@@ -585,6 +546,9 @@ setup_docker() {
 
     if [ -n "$ollama_url" ]; then
       docker_cmd+=(-e "OLLAMA_BASE_URL=$ollama_url")
+    else
+      # Disable OWUI's default Ollama connection when not using Ollama
+      docker_cmd+=(-e "ENABLE_OLLAMA_API=false")
     fi
 
     if [ -n "$default_model" ]; then
@@ -605,6 +569,15 @@ setup_docker() {
     if [ "$mcp_json" != "[]" ]; then
       printf "  ${GREEN}✓${NC} MCP tool servers pre-configured\n"
     fi
+
+    # Collect account info now while OWUI boots in the background
+    echo ""
+    echo "  While Open WebUI starts up, let's create your account."
+    echo ""
+    read -rp "  Enter your name: " OWUI_NAME
+    OWUI_NAME="${OWUI_NAME:-Admin}"
+    read -rp "  Enter your email: " OWUI_EMAIL
+    echo ""
   fi
 
   echo ""
@@ -619,30 +592,20 @@ configure_models() {
 
   echo ""
   echo "============================================================"
-  echo " Configuring models..."
+  echo " Configuring Open WebUI..."
   echo "============================================================"
   echo ""
 
-  # Wait for Open WebUI to be ready
-  printf "  Waiting for Open WebUI to start..."
+  # Wait for Open WebUI to be ready (first launch downloads ~90 MB embedding model)
+  printf "  Waiting for Open WebUI to start (first time may take 3-5 min)...\n"
   local retries=0
   while ! curl -sf http://localhost:8080/api/version >/dev/null 2>&1; do
     retries=$((retries + 1))
-    if [ $retries -ge 60 ]; then
-      printf "\n  ${RED}✗${NC} Open WebUI did not start in time\n"
-      printf "    Check: docker logs open-webui\n"
-      return
-    fi
+    local elapsed=$((retries * 2))
+    printf "\r  Waiting... %dm %02ds" $((elapsed/60)) $((elapsed%60))
     sleep 2
-    printf "."
   done
-  printf " ${GREEN}ready${NC}\n"
-
-  echo ""
-  echo "  Open http://localhost:8080 and create your admin account."
-  echo "  Come back here when you're done."
-  echo ""
-  read -rp "  Press Enter after creating your account..."
+  printf "\r  ${GREEN}✓${NC} Open WebUI ready (took %dm %02ds)              \n" $((retries*2/60)) $((retries*2%60))
   echo ""
 
   # Build system prompt and save to file
@@ -651,51 +614,56 @@ configure_models() {
   prompt_file="$HOME/.ibex-system-prompt.txt"
   echo -e "$sys_prompt" > "$prompt_file"
 
-  echo "  System prompt saved to $prompt_file"
-  echo ""
-  echo "  ────────────────────────────────────────"
-  echo -e "$sys_prompt"
-  echo "  ────────────────────────────────────────"
-  echo ""
-
-  if ! ask_yn "  Configure Open WebUI automatically? (requires sign-in)" "y"; then
+  # Collect account info while OWUI finishes starting (if not already collected)
+  local email password token
+  if [ -z "${OWUI_NAME:-}" ]; then
+    echo "  Creating your Open WebUI admin account..."
     echo ""
-    echo "  To set up manually:"
-    echo "  1. Go to Settings → General → System Prompt and paste from $prompt_file"
-    echo "  2. Go to Settings → Models → (each model) → Tools to assign tools"
-    return
+    read -rp "  Enter your name: " OWUI_NAME
+    OWUI_NAME="${OWUI_NAME:-Admin}"
+    read -rp "  Enter your email: " OWUI_EMAIL
+    echo ""
+
+    if [ -z "$OWUI_EMAIL" ]; then
+      printf "  ${RED}✗${NC} Email is required\n"
+      return
+    fi
   fi
 
-  echo ""
+  email="$OWUI_EMAIL"
+  password="changeme"
 
-  # Get credentials
-  local email password
-  read -rp "  Enter your Open WebUI email: " email
-  read -rsp "  Enter your Open WebUI password: " password
-  echo ""
-
-  # Authenticate
-  local auth_response token
-  auth_response=$(curl -sf -X POST http://localhost:8080/api/v1/auths/signin \
+  local signup_response
+  signup_response=$(curl -sf -X POST http://localhost:8080/api/v1/auths/signup \
     -H "Content-Type: application/json" \
-    -d "{\"email\":\"${email}\",\"password\":\"${password}\"}" 2>/dev/null)
+    -d "{\"email\":\"${email}\",\"password\":\"${password}\",\"name\":\"${OWUI_NAME}\"}" 2>/dev/null)
 
-  if [ -z "$auth_response" ]; then
-    printf "\n  ${RED}✗${NC} Could not sign in — check your email and password\n"
-    printf "    You can paste the prompt manually from %s\n" "$prompt_file"
-    return
+  if [ -z "$signup_response" ]; then
+    # Account may already exist — try signing in
+    printf "  ${YELLOW}·${NC} Account may already exist — signing in...\n"
+    signup_response=$(curl -sf -X POST http://localhost:8080/api/v1/auths/signin \
+      -H "Content-Type: application/json" \
+      -d "{\"email\":\"${email}\",\"password\":\"${password}\"}" 2>/dev/null)
+
+    if [ -z "$signup_response" ]; then
+      printf "  ${RED}✗${NC} Could not create or sign in to account\n"
+      printf "    Open http://localhost:8080 and set up manually.\n"
+      printf "    System prompt saved to %s\n" "$prompt_file"
+      return
+    fi
   fi
 
-  token=$(echo "$auth_response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+  token=$(echo "$signup_response" | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
 
   if [ -z "$token" ]; then
-    printf "\n  ${RED}✗${NC} Could not get auth token\n"
+    printf "  ${RED}✗${NC} Could not get auth token\n"
     return
   fi
 
-  printf "  ${GREEN}✓${NC} Signed in\n"
+  printf "  ${GREEN}✓${NC} Account created (password: ${BOLD}changeme${NC} — change it in Settings)\n"
 
-  # Set system prompt at user level (applies to all models)
+  # Set system prompt via user settings
+  # OWUI frontend reads from settings.ui.system (not top-level settings.system)
   python3 -c "
 import sys, json, urllib.request
 
@@ -705,7 +673,7 @@ prompt_file = sys.argv[2]
 with open(prompt_file) as f:
     sys_prompt = f.read().strip()
 
-# Get current user settings to avoid overwriting other fields
+# Get current user settings (may be null for new accounts)
 try:
     req = urllib.request.Request(
         'http://localhost:8080/api/v1/users/user/settings',
@@ -713,10 +681,15 @@ try:
     )
     resp = urllib.request.urlopen(req)
     settings = json.loads(resp.read())
+    if settings is None:
+        settings = {}
 except Exception:
     settings = {}
 
-settings['system'] = sys_prompt
+# Set in ui dict — this is what the OWUI frontend reads: settings.set(userSettings.ui)
+if 'ui' not in settings or settings['ui'] is None:
+    settings['ui'] = {}
+settings['ui']['system'] = sys_prompt
 
 payload = json.dumps(settings).encode()
 req = urllib.request.Request(
@@ -731,93 +704,31 @@ req = urllib.request.Request(
 urllib.request.urlopen(req)
 print('ok')
 " "$token" "$prompt_file" 2>/dev/null | grep -q "ok" && \
-    printf "  ${GREEN}✓${NC} System prompt set (user-level, applies to all models)\n" || \
-    printf "  ${RED}✗${NC} Failed to set system prompt\n"
+    printf "  ${GREEN}✓${NC} System prompt configured\n" || \
+    printf "  ${RED}✗${NC} Failed to set system prompt — paste manually from %s\n" "$prompt_file"
 
-  # Get list of available tools
-  local tools_response tool_ids
+  # Check MCP tools are available (admin users get access to all tools automatically)
+  local tools_response tool_count
   tools_response=$(curl -sf http://localhost:8080/api/v1/tools/ \
     -H "Authorization: Bearer $token" 2>/dev/null)
 
-  tool_ids=$(echo "$tools_response" | python3 -c "
+  tool_count=$(echo "$tools_response" | python3 -c "
 import sys, json
 tools = json.load(sys.stdin)
-ids = [t['id'] for t in tools if t.get('id')]
-print(json.dumps(ids))
-" 2>/dev/null || echo "[]")
+print(len([t for t in tools if t.get('id')]))
+" 2>/dev/null || echo "0")
 
-  if [ "$tool_ids" = "[]" ]; then
-    printf "  ${YELLOW}!${NC} No tools discovered yet — servers may still be loading\n"
-    printf "    You can assign tools manually in Settings → Models.\n"
+  if [ "$tool_count" = "0" ]; then
+    printf "  ${YELLOW}!${NC} No tools discovered yet — MCP servers may still be loading\n"
   else
-    local tool_count
-    tool_count=$(echo "$tool_ids" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null)
-    printf "  ${GREEN}✓${NC} Found %s tool(s)\n" "$tool_count"
+    printf "  ${GREEN}✓${NC} Found %s tool(s) — admin account has access to all\n" "$tool_count"
   fi
 
-  # Assign tools to each model
-  if [ "$tool_ids" != "[]" ]; then
-    local models_response
-    models_response=$(curl -sf http://localhost:8080/api/v1/models/ \
-      -H "Authorization: Bearer $token" 2>/dev/null)
+  echo ""
+  printf "  ${GREEN}✓${NC} Configuration complete\n"
 
-    if [ -z "$models_response" ]; then
-      printf "  ${YELLOW}!${NC} No models found — configure LLM connections first\n"
-      return
-    fi
-
-    echo "$models_response" | python3 -c "
-import sys, json, urllib.request
-
-token = sys.argv[1]
-tool_ids = json.loads(sys.argv[2])
-
-models = json.load(sys.stdin)
-
-for m in models:
-    mid = m.get('id', '')
-    name = m.get('name', mid)
-    base = m.get('base_model_id') or mid
-
-    update = {
-        'id': mid,
-        'name': name,
-        'base_model_id': base,
-        'is_active': m.get('is_active', True),
-        'params': m.get('params', {}),
-        'meta': m.get('meta', {}),
-    }
-    update['meta']['toolIds'] = tool_ids
-
-    payload = json.dumps(update).encode()
-    req = urllib.request.Request(
-        'http://localhost:8080/api/v1/models/model/update',
-        data=payload,
-        headers={
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/json',
-        },
-        method='POST',
-    )
-    try:
-        urllib.request.urlopen(req)
-        print(f'ok:{name}')
-    except Exception as e:
-        print(f'fail:{name}:{e}')
-" "$token" "$tool_ids" 2>/dev/null | while IFS= read -r line; do
-      case "$line" in
-        ok:*)
-          printf "  ${GREEN}✓${NC} Tools assigned to: %s\n" "${line#ok:}"
-          ;;
-        fail:*)
-          printf "  ${RED}✗${NC} Failed to assign tools: %s\n" "${line#fail:}"
-          ;;
-      esac
-    done
-  fi
-
-  printf "\n  ${GREEN}✓${NC} Configuration complete\n"
-  printf "  ${YELLOW}!${NC} Refresh Open WebUI in your browser to see the changes\n"
+  # Store credentials for display at the very end
+  OWUI_LOGIN_EMAIL="$email"
 }
 
 # ── Phase 7: Start Servers & Show Results ───────────────────
@@ -827,6 +738,10 @@ start_and_show() {
   echo " Starting IBEX servers..."
   echo "============================================================"
   echo ""
+
+  # Kill any stale IBEX server processes from previous runs
+  pkill -f "node.*IBEX/servers" 2>/dev/null || true
+  sleep 1
 
   # Source env to check what's configured
   if [ -f "$HOME/.ibex-mcp.env" ]; then
@@ -921,6 +836,22 @@ start_and_show() {
   echo "   ~/IBEX/                 Installation directory"
   echo ""
   echo "============================================================"
+
+  # Show login credentials and open browser as the very last thing
+  if [ -n "${OWUI_LOGIN_EMAIL:-}" ]; then
+    echo ""
+    echo "  Opening Open WebUI..."
+    open "http://localhost:8080" 2>/dev/null || xdg-open "http://localhost:8080" 2>/dev/null || true
+    echo ""
+    echo "  ┌────────────────────────────────────────────────────┐"
+    echo "  │  Click 'Get started', then sign in with:           │"
+    echo "  │  Email: $OWUI_LOGIN_EMAIL"
+    echo "  │  Password: changeme"
+    echo "  │                                                    │"
+    echo "  │  ⚠  Change your password in Settings → Account     │"
+    echo "  └────────────────────────────────────────────────────┘"
+  fi
+
   echo ""
 
   if [ $started -gt 0 ]; then
