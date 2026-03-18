@@ -91,7 +91,7 @@ want to use. You can skip any connector you don't need.
 
  OPEN WEBUI   Requires Docker Desktop (will be installed if missing)
               → Local LLM (recommended, no VPN needed):
-                Installs LM Studio + downloads a model automatically
+                Installs Ollama + downloads a model automatically
               → Percona internal LLM servers (requires VPN):
                 LM Studio: mac-studio-lm.int.percona.com
                 Ollama:    mac-studio-ollama.int.percona.com
@@ -253,57 +253,47 @@ PERCONA_LM_URL="https://mac-studio-lm.int.percona.com/v1"
 PERCONA_OLLAMA_URL="https://mac-studio-ollama.int.percona.com"
 PERCONA_DEFAULT_MODEL="qwen3-coder-30"
 
-# Local LM Studio config
-LOCAL_LM_PORT=1234
-LOCAL_MODEL_LARGE="qwen3.5-35b-a3b"   # MoE 35B/3B active, ~22 GB Q4 — needs 32 GB+ RAM
-LOCAL_MODEL_SMALL="qwen3-14b"          # Dense 14B, ~9 GB Q4 — fits 16-31 GB RAM
-LOCAL_SELECTED_MODEL=""                # Set by setup_local_lm_studio based on RAM
+# Local Ollama config
+LOCAL_OLLAMA_PORT=11434
+LOCAL_MODEL_LARGE="qwen3:32b"          # Dense 32B, ~20 GB Q4 — needs 32 GB+ RAM
+LOCAL_MODEL_SMALL="qwen3:14b"          # Dense 14B, ~9 GB Q4 — fits 16-31 GB RAM
+LOCAL_SELECTED_MODEL=""                # Set by setup_local_ollama based on RAM
 
-setup_local_lm_studio() {
-  # Install LM Studio and download models for local inference
+setup_local_ollama() {
+  # Install Ollama and download models for local inference
   # Returns 0 on success, 1 on failure
 
-  local lms_available=false
-
-  # Check if lms CLI is available
-  if command -v lms &>/dev/null; then
-    lms_available=true
-    printf "  ${GREEN}✓${NC} LM Studio CLI found\n"
+  # Check if Ollama is installed
+  if command -v ollama &>/dev/null; then
+    printf "  ${GREEN}✓${NC} Ollama found\n"
   else
-    # Check if LM Studio app is installed but CLI not bootstrapped
-    if [ -d "/Applications/LM Studio.app" ] || [ -d "$HOME/Applications/LM Studio.app" ]; then
-      printf "  ${YELLOW}!${NC} LM Studio app found but CLI not in PATH\n"
-      echo "  Bootstrapping lms CLI..."
-      if "$( [ -d "/Applications/LM Studio.app" ] && echo "/Applications/LM Studio.app" || echo "$HOME/Applications/LM Studio.app" )/Contents/Resources/bin/lms" bootstrap 2>/dev/null; then
-        # Refresh PATH
-        export PATH="$HOME/.lmstudio/bin:$PATH"
-        lms_available=true
-        printf "  ${GREEN}✓${NC} LM Studio CLI bootstrapped\n"
-      fi
-    fi
-  fi
-
-  if ! $lms_available; then
     echo ""
-    echo "  LM Studio is not installed. Installing now..."
-    echo "  (This downloads the LM Studio app and CLI)"
+    echo "  Ollama is not installed. Installing now..."
     echo ""
 
-    if curl -fsSL https://lmstudio.ai/install.sh | bash 2>&1 | sed 's/^/  /'; then
-      # Add to PATH for this session
-      export PATH="$HOME/.lmstudio/bin:$PATH"
-      if command -v lms &>/dev/null; then
-        lms_available=true
-        printf "\n  ${GREEN}✓${NC} LM Studio installed\n"
+    if curl -fsSL https://ollama.com/install.sh | sh 2>&1 | sed 's/^/  /'; then
+      if command -v ollama &>/dev/null; then
+        printf "\n  ${GREEN}✓${NC} Ollama installed\n"
       else
-        printf "\n  ${RED}✗${NC} LM Studio installed but CLI not found in PATH\n"
+        printf "\n  ${RED}✗${NC} Ollama installed but not found in PATH\n"
         echo "  Try restarting your terminal and running install.sh again."
         return 1
       fi
     else
-      printf "\n  ${RED}✗${NC} LM Studio installation failed\n"
-      echo "  Install manually from: https://lmstudio.ai"
+      printf "\n  ${RED}✗${NC} Ollama installation failed\n"
+      echo "  Install manually from: https://ollama.com"
       return 1
+    fi
+  fi
+
+  # Make sure Ollama is running
+  if ! curl -sf --connect-timeout 2 "http://localhost:${LOCAL_OLLAMA_PORT}/api/tags" >/dev/null 2>&1; then
+    echo "  Starting Ollama..."
+    ollama serve &>/dev/null &
+    sleep 3
+    if ! curl -sf --connect-timeout 5 "http://localhost:${LOCAL_OLLAMA_PORT}/api/tags" >/dev/null 2>&1; then
+      printf "  ${YELLOW}!${NC} Ollama not responding — it may need a moment\n"
+      echo "  If this persists, open the Ollama app manually."
     fi
   fi
 
@@ -320,44 +310,25 @@ setup_local_lm_studio() {
     echo ""
     echo "  Detected ${total_ram_gb} GB RAM."
     echo "  Downloading model: $LOCAL_SELECTED_MODEL"
-    echo "  Fast MoE model (35B total, 3B active) optimized for tool calling (~22 GB)."
+    echo "  Dense 32B model with native tool calling (~20 GB)."
   else
     LOCAL_SELECTED_MODEL="$LOCAL_MODEL_SMALL"
     echo ""
     echo "  Detected ${total_ram_gb} GB RAM."
     echo "  Downloading model: $LOCAL_SELECTED_MODEL"
-    echo "  Dense 14B model optimized for tool calling (~9 GB)."
+    echo "  Dense 14B model with native tool calling (~9 GB)."
   fi
   echo ""
 
-  if lms get "$LOCAL_SELECTED_MODEL" --yes 2>&1 | sed 's/^/  /'; then
+  if ollama pull "$LOCAL_SELECTED_MODEL" 2>&1 | sed 's/^/  /'; then
     printf "\n  ${GREEN}✓${NC} Model downloaded: %s\n" "$LOCAL_SELECTED_MODEL"
   else
     printf "\n  ${RED}✗${NC} Failed to download model\n"
-    echo "  You can download it later: lms get $LOCAL_SELECTED_MODEL"
+    echo "  You can download it later: ollama pull $LOCAL_SELECTED_MODEL"
     return 1
   fi
 
-  # Start the LM Studio server
-  echo ""
-  echo "  Starting LM Studio server on port $LOCAL_LM_PORT..."
-
-  # Check if server is already running
-  if curl -sf --connect-timeout 2 "http://localhost:${LOCAL_LM_PORT}/v1/models" >/dev/null 2>&1; then
-    printf "  ${GREEN}✓${NC} LM Studio server already running on port %s\n" "$LOCAL_LM_PORT"
-  else
-    if lms server start --port "$LOCAL_LM_PORT" 2>&1 | sed 's/^/  /'; then
-      sleep 2
-      if curl -sf --connect-timeout 5 "http://localhost:${LOCAL_LM_PORT}/v1/models" >/dev/null 2>&1; then
-        printf "  ${GREEN}✓${NC} LM Studio server started on port %s\n" "$LOCAL_LM_PORT"
-      else
-        printf "  ${YELLOW}!${NC} Server started but not yet responding — it may need a moment\n"
-      fi
-    else
-      printf "  ${YELLOW}!${NC} Could not auto-start server\n"
-      echo "  Start it manually: lms server start"
-    fi
-  fi
+  printf "  ${GREEN}✓${NC} Ollama server running on port %s\n" "$LOCAL_OLLAMA_PORT"
 
   return 0
 }
@@ -436,7 +407,7 @@ setup_docker() {
     echo "  Which LLM backend should Open WebUI connect to?"
     echo ""
     echo "    1) Local LLM (recommended — no VPN needed)"
-    echo "       Installs LM Studio + downloads a model (requires 16 GB+ RAM)"
+    echo "       Installs Ollama + downloads a model (requires 16 GB+ RAM)"
     echo ""
     echo "    2) Percona internal servers (requires VPN)"
     echo "       LM Studio + Ollama models on Percona network"
@@ -453,15 +424,14 @@ setup_docker() {
     case "$backend_choice" in
       1)
         echo ""
-        if setup_local_lm_studio; then
-          openai_url="http://host.docker.internal:${LOCAL_LM_PORT}/v1"
-          openai_key="dummy"
+        if setup_local_ollama; then
+          ollama_url="http://host.docker.internal:${LOCAL_OLLAMA_PORT}"
           default_model="$LOCAL_SELECTED_MODEL"
-          printf "\n  ${GREEN}✓${NC} Using local LM Studio server\n"
+          printf "\n  ${GREEN}✓${NC} Using local Ollama server\n"
           printf "  ${GREEN}✓${NC} Default model: %s\n" "$default_model"
         else
-          printf "\n  ${RED}✗${NC} Local LM Studio setup failed\n"
-          printf "    You can set up LM Studio manually later.\n\n"
+          printf "\n  ${RED}✗${NC} Local Ollama setup failed\n"
+          printf "    You can set up Ollama manually later.\n\n"
           read -rp "  Press Enter to go back to LLM selection..."
           continue
         fi
@@ -490,7 +460,7 @@ setup_docker() {
         ;;
       3)
         echo ""
-        if setup_local_lm_studio; then
+        if setup_local_ollama; then
           printf "\n"
         else
           printf "\n  ${YELLOW}!${NC} Local setup failed — continuing with Percona servers only\n"
@@ -508,13 +478,11 @@ setup_docker() {
           continue
         fi
 
-        # Multiple OpenAI-compatible endpoints: semicolon-separated
-        local local_url="http://host.docker.internal:${LOCAL_LM_PORT}/v1"
-        openai_url="${PERCONA_LM_URL};${local_url}"
-        openai_key="none;dummy"
-        ollama_url="$PERCONA_OLLAMA_URL"
+        openai_url="${PERCONA_LM_URL}"
+        openai_key="none"
+        ollama_url="http://host.docker.internal:${LOCAL_OLLAMA_PORT};${PERCONA_OLLAMA_URL}"
         default_model="$PERCONA_DEFAULT_MODEL"
-        printf "\n  ${GREEN}✓${NC} Using Percona internal + local LLM servers\n"
+        printf "\n  ${GREEN}✓${NC} Using Percona internal + local Ollama servers\n"
         printf "  ${GREEN}✓${NC} Default model: %s\n" "$default_model"
         break
         ;;
