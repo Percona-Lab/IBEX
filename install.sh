@@ -304,10 +304,10 @@ EOF
 # Percona internal LLM server config (requires VPN)
 PERCONA_LM_URL="https://mac-studio-lm.int.percona.com/v1"
 PERCONA_OLLAMA_URL="https://mac-studio-ollama.int.percona.com"
-PERCONA_DEFAULT_MODEL="gpt-oss:latest"
+PERCONA_DEFAULT_MODEL="openai/gpt-oss-20b"
 
 # Models to show by default (all others are hidden but can be re-enabled in admin UI)
-PERCONA_RECOMMENDED_MODELS="gpt-oss:latest,qwen/qwen3-coder-30b"
+PERCONA_RECOMMENDED_MODELS="openai/gpt-oss-20b,gpt-oss:latest,qwen/qwen3-coder-30b"
 
 # Local Ollama config
 LOCAL_OLLAMA_PORT=11434
@@ -850,6 +850,10 @@ hidden = 0
 for m in models_list:
     mid = m.get('id', '')
     if mid in recommended:
+        # Ensure recommended models have native function calling enabled
+        payload = {'id': mid, 'name': m.get('name', mid), 'meta': {'hidden': False}, 'params': {'function_calling': 'native'}}
+        api('POST', '/api/v1/models/create', payload)
+        api('POST', f'/api/v1/models/model/update?id={mid}', payload)
         continue
     payload = {'id': mid, 'name': m.get('name', mid), 'meta': {'hidden': True}, 'params': {}}
     api('POST', '/api/v1/models/create', payload)  # create config entry (may already exist)

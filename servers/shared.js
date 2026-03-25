@@ -26,6 +26,35 @@ dotenv.config({ path: join(homedir(), '.ibex-mcp.env'), override: true });
 export async function createMCPServer({ name, tools, handler, defaultPort = 3001 }) {
   const port = process.env.MCP_SSE_PORT || defaultPort;
 
+  // Retry listen with back-off when the port is still held by a dying process
+  function listenWithRetry(server, retries = 5, delay = 1000) {
+    return new Promise((resolve, reject) => {
+      const attempt = (n) => {
+        server.listen(port, () => resolve());
+        server.once('error', (err) => {
+          if (err.code === 'EADDRINUSE' && n > 0) {
+            console.error(`[${name}] Port ${port} busy, retrying in ${delay}ms (${n} left)…`);
+            setTimeout(() => { server.removeAllListeners('error'); attempt(n - 1); }, delay);
+          } else {
+            reject(err);
+          }
+        });
+      };
+      attempt(retries);
+    });
+  }
+
+  // Graceful shutdown — release the port immediately so restarts don't EADDRINUSE
+  function onShutdown(httpServer) {
+    const shutdown = (signal) => {
+      console.error(`[${name}] ${signal} received, shutting down…`);
+      httpServer.close(() => process.exit(0));
+      setTimeout(() => process.exit(1), 3000); // force exit after 3s
+    };
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
+  }
+
   function buildServer() {
     const server = new Server(
       { name, version: '1.0.0' },
@@ -116,9 +145,9 @@ export async function createMCPServer({ name, tools, handler, defaultPort = 3001
       } else { res.writeHead(404); res.end('Not found'); }
     });
 
-    httpServer.listen(port, () => {
-      console.error(`${name} — Streamable HTTP on http://localhost:${port}/mcp`);
-    });
+    await listenWithRetry(httpServer);
+    onShutdown(httpServer);
+    console.error(`${name} — Streamable HTTP on http://localhost:${port}/mcp`);
 
   } else if (mode === '--sse-only') {
     const sseServer = buildServer();
@@ -152,9 +181,9 @@ export async function createMCPServer({ name, tools, handler, defaultPort = 3001
       } else { res.writeHead(404); res.end('Not found'); }
     });
 
-    httpServer.listen(port, () => {
-      console.error(`${name} — SSE on http://localhost:${port}/sse`);
-    });
+    await listenWithRetry(httpServer);
+    onShutdown(httpServer);
+    console.error(`${name} — SSE on http://localhost:${port}/sse`);
 
   } else {
     // stdio
