@@ -477,17 +477,19 @@ setup_docker() {
   echo "============================================================"
   echo ""
 
-  # Always remove existing container — env vars are baked in at creation time
-  # and must be recreated to pick up new LLM/MCP settings.
-  # We keep ~/open-webui-data/cache/ to avoid re-downloading the embedding model.
+  # Always remove existing container and data — env vars are baked in at creation
+  # time and must be recreated to pick up new LLM/MCP settings.
+  # Credentials are safe in ~/.ibex-mcp.env (not touched here).
   if docker ps -a --format '{{.Names}}' | grep -q '^open-webui$'; then
-    echo "  Removing old Open WebUI container..."
+    echo "  Removing old Open WebUI container and data..."
     docker stop open-webui 2>/dev/null || true
     docker rm open-webui 2>/dev/null || true
-    # Remove database (forces fresh account) but keep cached models
-    rm -f "$HOME/open-webui-data/webui.db"
     printf "  ${GREEN}✓${NC} Old container removed\n"
   fi
+  # Clean slate: remove old DB, settings, and stale images to avoid conflicts
+  rm -rf "$HOME/open-webui-data"
+  docker image rm ghcr.io/open-webui/open-webui:main 2>/dev/null || true
+  docker image rm ghcr.io/open-webui/open-webui:latest 2>/dev/null || true
 
   # Only reach here if container doesn't exist or user chose to recreate
   if ! docker ps -a --format '{{.Names}}' | grep -q '^open-webui$'; then
