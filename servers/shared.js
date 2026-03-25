@@ -40,8 +40,20 @@ export async function createMCPServer({ name, tools, handler, defaultPort = 3001
         const result = await handler(toolName, args);
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       } catch (error) {
+        const code = error.code || error.cause?.code || '';
+        let errMsg;
+        if (code === 'ECONNREFUSED' || code === 'ENOTFOUND') {
+          errMsg = `Connection failed: Could not reach the service. Check that credentials are correct and the service is accessible.`;
+        } else if (code === 'ETIMEDOUT' || code === 'ESOCKETTIMEDOUT' || code === 'UND_ERR_CONNECT_TIMEOUT') {
+          errMsg = `Request timed out: The service took too long to respond. Try again or use a simpler query.`;
+        } else if (error.message?.includes('401') || error.message?.includes('403') || error.message?.includes('invalid_auth')) {
+          errMsg = `Authentication failed: The credentials for this service are invalid or expired. Re-run configure.sh to update them.`;
+        } else {
+          errMsg = error.message;
+        }
+        console.error(`[${name}] Tool error (${request.params.name}): ${error.message}`);
         return {
-          content: [{ type: 'text', text: `Error: ${error.message}` }],
+          content: [{ type: 'text', text: `Error: ${errMsg}` }],
           isError: true,
         };
       }

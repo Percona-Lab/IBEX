@@ -3,6 +3,8 @@
 # Sourced by install.sh and configure.sh
 
 build_system_prompt() {
+  local llm_backend="${1:-local}"  # "local" or "remote"
+
   # Sources ~/.ibex-mcp.env to check what's configured
   if [ -f "$HOME/.ibex-mcp.env" ]; then
     set -a
@@ -11,6 +13,8 @@ build_system_prompt() {
   fi
 
   local prompt="You are a helpful work assistant with access to workplace tools via IBEX."
+  prompt+=" Do not use <think> blocks or internal reasoning. Respond directly and concisely."
+  prompt+=" When a tool is available for the user's request, call it immediately without explaining your reasoning."
 
   # ── User identity ──────────────────────────────────────────
   # Resolve the user's Slack identity so the model knows who "me/my" refers to
@@ -28,6 +32,12 @@ build_system_prompt() {
   if [ -n "$slack_user" ]; then
     prompt+="\nThe current user's Slack username is @${slack_user} (ID: ${slack_user_id})."
     prompt+="\nWhen the user says \"my\" messages, search with from:@${slack_user}."
+  fi
+
+  # Add Jira identity so models know who "my tickets" refers to
+  if [ -n "${JIRA_EMAIL:-}" ]; then
+    prompt+="\nThe current user's Jira email is ${JIRA_EMAIL}."
+    prompt+="\nWhen the user says \"my\" tickets, use assignee=currentUser() in JQL."
   fi
 
   # ── Available tools ────────────────────────────────────────
@@ -100,6 +110,8 @@ build_system_prompt() {
   prompt+="\n- When the user says \"my\" messages/tickets/etc, filter for the current user."
   prompt+="\n- Keep responses concise and well-formatted."
   prompt+="\n- If a tool is not listed above, tell the user that connector is not configured."
+  prompt+="\n- Make ONE tool call per question, then present the results. Do NOT call the same tool repeatedly."
+  prompt+="\n- After receiving tool results, immediately format them as a table or summary. Do not make additional calls."
 
   echo -e "$prompt"
 }

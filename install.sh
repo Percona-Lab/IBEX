@@ -251,7 +251,10 @@ configure_credentials() {
 # Percona internal LLM server config (requires VPN)
 PERCONA_LM_URL="https://mac-studio-lm.int.percona.com/v1"
 PERCONA_OLLAMA_URL="https://mac-studio-ollama.int.percona.com"
-PERCONA_DEFAULT_MODEL="qwen3-coder-30"
+PERCONA_DEFAULT_MODEL="gpt-oss:latest"
+
+# Models to show by default (all others are hidden but can be re-enabled in admin UI)
+PERCONA_RECOMMENDED_MODELS="gpt-oss:latest,qwen/qwen3-coder-30b"
 
 # Local Ollama config
 LOCAL_OLLAMA_PORT=11434
@@ -320,12 +323,46 @@ setup_local_ollama() {
   fi
   echo ""
 
-  if ollama pull "$LOCAL_SELECTED_MODEL" 2>&1 | sed 's/^/  /'; then
-    printf "\n  ${GREEN}✓${NC} Model downloaded: %s\n" "$LOCAL_SELECTED_MODEL"
+  # Check if model is already in Ollama
+  if ollama list 2>/dev/null | grep -q "^${LOCAL_SELECTED_MODEL}"; then
+    printf "  ${GREEN}✓${NC} Model already available: %s\n" "$LOCAL_SELECTED_MODEL"
   else
-    printf "\n  ${RED}✗${NC} Failed to download model\n"
-    echo "  You can download it later: ollama pull $LOCAL_SELECTED_MODEL"
-    return 1
+    # Check if model exists in LM Studio — import locally instead of downloading
+    local gguf_path=""
+    local model_basename="${LOCAL_SELECTED_MODEL%%:*}"  # e.g. "qwen3" from "qwen3:14b"
+    local model_size="${LOCAL_SELECTED_MODEL##*:}"      # e.g. "14b" from "qwen3:14b"
+    if [ -d "$HOME/.lmstudio/models" ]; then
+      gguf_path=$(find "$HOME/.lmstudio/models" -iname "*${model_basename}*${model_size}*" -name "*.gguf" 2>/dev/null | head -1)
+    fi
+
+    if [ -n "$gguf_path" ]; then
+      echo "  Found existing model in LM Studio — importing locally..."
+      echo "  Source: $gguf_path"
+      local modelfile="/tmp/ibex-ollama-modelfile"
+      echo "FROM $gguf_path" > "$modelfile"
+      if ollama create "$LOCAL_SELECTED_MODEL" -f "$modelfile" 2>/dev/null; then
+        rm -f "$modelfile"
+        printf "  ${GREEN}✓${NC} Model imported from LM Studio: %s\n" "$LOCAL_SELECTED_MODEL"
+      else
+        rm -f "$modelfile"
+        printf "  ${YELLOW}!${NC} Import failed — downloading instead...\n"
+        if ollama pull "$LOCAL_SELECTED_MODEL"; then
+          printf "\n  ${GREEN}✓${NC} Model downloaded: %s\n" "$LOCAL_SELECTED_MODEL"
+        else
+          printf "\n  ${RED}✗${NC} Failed to download model\n"
+          echo "  You can download it later: ollama pull $LOCAL_SELECTED_MODEL"
+          return 1
+        fi
+      fi
+    else
+      if ollama pull "$LOCAL_SELECTED_MODEL"; then
+        printf "\n  ${GREEN}✓${NC} Model downloaded: %s\n" "$LOCAL_SELECTED_MODEL"
+      else
+        printf "\n  ${RED}✗${NC} Failed to download model\n"
+        echo "  You can download it later: ollama pull $LOCAL_SELECTED_MODEL"
+        return 1
+      fi
+    fi
   fi
 
   printf "  ${GREEN}✓${NC} Ollama server running on port %s\n" "$LOCAL_OLLAMA_PORT"
@@ -578,7 +615,12 @@ configure_models() {
 
   # Build system prompt and save to file
   local sys_prompt prompt_file
-  sys_prompt=$(build_system_prompt)
+  # Pass "local" or "remote" to control thinking mode in system prompt
+  local llm_type="local"
+  if [ "${backend_choice:-1}" = "2" ]; then
+    llm_type="remote"
+  fi
+  sys_prompt=$(build_system_prompt "$llm_type")
   prompt_file="$HOME/.ibex-system-prompt.txt"
   echo -e "$sys_prompt" > "$prompt_file"
 
@@ -659,6 +701,12 @@ if 'ui' not in settings or settings['ui'] is None:
     settings['ui'] = {}
 settings['ui']['system'] = sys_prompt
 
+# Cap max output tokens to prevent infinite generation loops (local models only)
+if '${llm_type}' == 'local':
+    if 'params' not in settings or settings['params'] is None:
+        settings['params'] = {}
+    settings['params']['num_predict'] = 2048
+
 payload = json.dumps(settings).encode()
 req = urllib.request.Request(
     'http://localhost:8080/api/v1/users/user/settings/update',
@@ -692,6 +740,54 @@ print(len([t for t in tools if t.get('id')]))
     printf "  ${GREEN}✓${NC} Found %s tool(s) — admin account has access to all\n" "$tool_count"
   fi
 
+  # Hide non-recommended models (Percona remote backends only)
+  if [ "${backend_choice:-1}" = "2" ] || [ "${backend_choice:-1}" = "3" ]; then
+    local hidden_count
+    hidden_count=$(python3 -c "
+import sys, json, urllib.request
+
+token = sys.argv[1]
+recommended = set(sys.argv[2].split(','))
+default_model = sys.argv[3]
+base = 'http://localhost:8080'
+
+# Get all models from backend
+req = urllib.request.Request(f'{base}/api/models', headers={'Authorization': f'Bearer {token}'})
+models = json.loads(urllib.request.urlopen(req).read())
+models_list = models.get('data', models) if isinstance(models, dict) else models
+
+# Build hidden metadata for non-recommended models
+metadata = {}
+for m in models_list:
+    mid = m.get('id', '')
+    if 'embed' in mid.lower() or 'arena' in mid.lower():
+        continue
+    if mid not in recommended:
+        metadata[mid] = {'hidden': True}
+
+# Update admin model config: set default, order recommended first, hide the rest
+payload = json.dumps({
+    'DEFAULT_MODELS': default_model,
+    'DEFAULT_PINNED_MODELS': None,
+    'MODEL_ORDER_LIST': list(recommended),
+    'DEFAULT_MODEL_METADATA': metadata,
+    'DEFAULT_MODEL_PARAMS': {},
+}).encode()
+
+req = urllib.request.Request(
+    f'{base}/api/v1/configs/models',
+    data=payload,
+    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+    method='POST',
+)
+urllib.request.urlopen(req)
+print(len(metadata))
+" "$token" "$PERCONA_RECOMMENDED_MODELS" "$PERCONA_DEFAULT_MODEL" 2>/dev/null)
+    if [ -n "$hidden_count" ] && [ "$hidden_count" -gt 0 ] 2>/dev/null; then
+      printf "  ${GREEN}✓${NC} Showing recommended models only (%s hidden — unhide in Admin → Models)\n" "$hidden_count"
+    fi
+  fi
+
   echo ""
   printf "  ${GREEN}✓${NC} Configuration complete\n"
 
@@ -707,73 +803,15 @@ start_and_show() {
   echo "============================================================"
   echo ""
 
-  # Kill any stale IBEX server processes from previous runs
-  pkill -f "node.*IBEX/servers" 2>/dev/null || true
-  sleep 1
-
-  # Source env to check what's configured
-  if [ -f "$HOME/.ibex-mcp.env" ]; then
-    set -a
-    source "$HOME/.ibex-mcp.env"
-    set +a
-  fi
-
-  # Start only configured servers
-  local started=0
-
-  if [ -n "${SLACK_TOKEN:-}" ]; then
-    node "$IBEX_DIR/servers/slack.js" --http &
-    printf "  ${GREEN}✓${NC} Slack        → http://localhost:3001/mcp\n"
-    started=$((started + 1))
-  else
-    printf "  ${RED}✗${NC} Slack        (not configured)\n"
-  fi
-
-  if [ -n "${NOTION_TOKEN:-}" ]; then
-    node "$IBEX_DIR/servers/notion.js" --http &
-    printf "  ${GREEN}✓${NC} Notion       → http://localhost:3002/mcp\n"
-    started=$((started + 1))
-  else
-    printf "  ${RED}✗${NC} Notion       (not configured)\n"
-  fi
-
-  if [ -n "${JIRA_DOMAIN:-}" ] && [ -n "${JIRA_EMAIL:-}" ] && [ -n "${JIRA_API_TOKEN:-}" ]; then
-    node "$IBEX_DIR/servers/jira.js" --http &
-    printf "  ${GREEN}✓${NC} Jira         → http://localhost:3003/mcp\n"
-    started=$((started + 1))
-  else
-    printf "  ${RED}✗${NC} Jira         (not configured)\n"
-  fi
-
-  if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_OWNER:-}" ] && [ -n "${GITHUB_REPO:-}" ]; then
-    node "$IBEX_DIR/servers/memory.js" --http &
-    printf "  ${GREEN}✓${NC} Memory       → http://localhost:3004/mcp\n"
-    started=$((started + 1))
-  else
-    printf "  ${RED}✗${NC} Memory       (not configured)\n"
-  fi
-
-  if [ -n "${SERVICENOW_INSTANCE:-}" ] && [ -n "${SERVICENOW_USERNAME:-}" ] && [ -n "${SERVICENOW_PASSWORD:-}" ]; then
-    node "$IBEX_DIR/servers/servicenow.js" --http &
-    printf "  ${GREEN}✓${NC} ServiceNow   → http://localhost:3005/mcp\n"
-    started=$((started + 1))
-  else
-    printf "  ${RED}✗${NC} ServiceNow   (not configured)\n"
-  fi
-
-  if [ -n "${SALESFORCE_INSTANCE_URL:-}" ] && [ -n "${SALESFORCE_ACCESS_TOKEN:-}" ]; then
-    node "$IBEX_DIR/servers/salesforce.js" --http &
-    printf "  ${GREEN}✓${NC} Salesforce   → http://localhost:3006/mcp\n"
-    started=$((started + 1))
-  else
-    printf "  ${RED}✗${NC} Salesforce   (not configured)\n"
-  fi
-
-  # Wait a moment for servers to start
-  sleep 2
-
+  # Clean up any existing services, then reinstall
+  bash "$IBEX_DIR/scripts/launchd-service.sh" uninstall 2>/dev/null || true
   echo ""
-  echo "  $started server(s) started."
+  echo "  Installing MCP servers as background services..."
+  echo ""
+  bash "$IBEX_DIR/scripts/launchd-service.sh" install
+
+  # Wait for services to start
+  sleep 3
 
   # Configure models with system prompt and tools
   configure_models
@@ -821,11 +859,11 @@ start_and_show() {
   fi
 
   echo ""
-
-  if [ $started -gt 0 ]; then
-    echo "Press Ctrl+C to stop all IBEX servers"
-    wait
-  fi
+  echo " MCP servers are running as background services."
+  echo " They will auto-start on login. Manage with:"
+  echo "   ~/IBEX/scripts/launchd-service.sh status"
+  echo "   ~/IBEX/scripts/launchd-service.sh uninstall"
+  echo ""
 }
 
 # ── Main ────────────────────────────────────────────────────

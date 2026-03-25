@@ -38,7 +38,13 @@ export class ServiceNowConnector {
     };
 
     if (query) params.sysparm_query = query;
-    if (fields?.length) params.sysparm_fields = fields.join(',');
+
+    // Default to common fields to avoid 60KB+ responses that blow out LLM context windows
+    if (fields?.length) {
+      params.sysparm_fields = fields.join(',');
+    } else {
+      params.sysparm_fields = 'number,short_description,priority,state,assigned_to,opened_at,sys_updated_on,category';
+    }
 
     const data = await this.apiCall(`/table/${table}`, params);
 
