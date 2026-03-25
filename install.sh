@@ -4,6 +4,7 @@
 
 # Not using set -e — the installer handles errors explicitly with if/else blocks
 
+
 # ── Colors ──────────────────────────────────────────────────
 
 if [ -t 1 ]; then
@@ -824,7 +825,7 @@ print(hidden)
   echo ""
   printf "  Would you like to set up ${BOLD}https://ibex${NC} as a local shortcut? (requires admin password)\n"
   read -rp "  Set up https://ibex? (y/N): " setup_domain
-  if [ "${setup_domain,,}" = "y" ]; then
+  if [ "$setup_domain" = "y" ] || [ "$setup_domain" = "Y" ]; then
     # Install mkcert and caddy if needed
     if ! command -v mkcert &>/dev/null; then
       printf "  Installing mkcert...\n"
