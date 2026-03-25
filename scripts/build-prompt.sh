@@ -114,6 +114,7 @@ build_system_prompt() {
   prompt+="\n- If a tool is not listed above, tell the user that connector is not configured."
   prompt+="\n- Make ONE tool call per question, then present the results. Do NOT call the same tool repeatedly."
   prompt+="\n- After receiving tool results, immediately format them as a table or summary. Do not make additional calls."
+  prompt+="\n- When presenting results that include URLs (Notion pages, Jira tickets, etc.), ALWAYS include clickable URLs in your response."
 
   echo -e "$prompt"
 }
