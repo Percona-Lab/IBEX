@@ -617,6 +617,9 @@ setup_docker() {
       docker_cmd+=(-e "TOOL_SERVER_CONNECTIONS=$mcp_json")
     fi
 
+    # Limit tool call retries to prevent infinite loops (OWUI default is 30)
+    docker_cmd+=(-e "CHAT_RESPONSE_MAX_TOOL_CALL_RETRIES=2")
+
     docker_cmd+=(ghcr.io/open-webui/open-webui:main)
     "${docker_cmd[@]}"
 
