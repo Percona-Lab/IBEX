@@ -307,7 +307,7 @@ PERCONA_OLLAMA_URL="https://mac-studio-ollama.int.percona.com"
 PERCONA_DEFAULT_MODEL="openai/gpt-oss-20b"
 
 # Models to show by default (all others are hidden but can be re-enabled in admin UI)
-PERCONA_RECOMMENDED_MODELS="openai/gpt-oss-20b,gpt-oss:latest,qwen/qwen3-coder-30b"
+PERCONA_RECOMMENDED_MODELS="openai/gpt-oss-20b,qwen/qwen3-coder-30b"
 
 # Local Ollama config
 LOCAL_OLLAMA_PORT=11434
