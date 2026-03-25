@@ -4,22 +4,30 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io/) server that connects AI assistants to your workplace tools — Slack, Notion, Jira, ServiceNow, Salesforce, and a persistent GitHub-backed memory system.
 
-Designed to run alongside [Open WebUI](https://github.com/open-webui/open-webui) with Percona's internal LLM servers (Ollama + LM Studio) for a self-hosted AI assistant with access to your internal tools. Branded as **Percona IBEX** in the UI.
+Designed to run alongside [Open WebUI](https://github.com/open-webui/open-webui) with Percona's internal LLM servers (Ollama) for a self-hosted AI assistant with access to your internal tools. Branded as **Percona IBEX** in the UI.
 
 ## Quick Start (from zip)
 
 1. Download and unzip `IBEX.zip`
 2. Double-click **`Install IBEX.command`**
 3. Follow the prompts — enter credentials for each connector (skip any you don't need)
-4. When asked "Which LLM backend?", press Enter for the default (**Percona internal servers** — requires VPN)
-5. Enter your name and email when prompted
+4. When asked "Which LLM backend?", press **Enter** for the default (**Option 1: Percona internal servers** — requires VPN)
+5. Enter your name and email when prompted (saved to `~/.ibex-mcp.env` for future reinstalls)
+6. Optionally set up **https://ibex** as a local domain (requires admin password once)
+
+The installer automatically:
+- Applies **Percona IBEX** branding (logo + title)
+- Creates your account and logs you in
+- Opens the browser when ready
+
+> **Reinstalling?** No need to wipe `~/IBEX` first — the installer handles everything. On reinstall it detects your saved credentials (name/email) and offers to reuse them, and auto-restores the **https://ibex** domain if previously configured.
 
 > **Note:** If macOS asks "iTerm would like to access data from other apps", click **Allow** — this is Docker accessing its credential store.
 
 ### After install
 
-1. Open **http://localhost:8080** (or **https://ibex** if you opted for the custom domain), log in (password: `changeme`)
-2. Click the **wrench icon** in the chat box and **enable all tools**
+1. Open **https://ibex** (or **http://localhost:8080** if you skipped the custom domain) — you're already logged in
+2. Click the **wrench icon** in the chat box and **enable all tools** (required before using any connectors)
 3. Try these prompts:
    - "Search Slack for messages about IBEX"
    - "Show me my open Jira tickets"
@@ -28,10 +36,10 @@ Designed to run alongside [Open WebUI](https://github.com/open-webui/open-webui)
 
 ### Recommended models
 
-| Model | Backend | Best for |
-|-------|---------|----------|
-| **gpt-oss:latest** (default) | Ollama | Slack, Jira, Notion — fastest, cleanest output |
-| **qwen/qwen3-coder-30b** | LM Studio | ServiceNow queries |
+| Model | Best for |
+|-------|----------|
+| **gpt-oss:latest** (default) | Slack, Jira, Notion — fastest, cleanest tool-calling output |
+| **qwen3-coder-30b** | ServiceNow queries |
 
 All other models are hidden by default. Unhide them in Admin Panel → Settings → Models if needed.
 
@@ -78,10 +86,11 @@ During install, you can optionally set up **https://ibex** as a local shortcut:
 - Requires admin password (one-time) for the local TLS certificate and hosts file entry
 - Uses [mkcert](https://github.com/FiloSottile/mkcert) for locally-trusted TLS + [Caddy](https://caddyserver.com/) as reverse proxy
 - Firefox users need `nss` installed (`brew install nss`) for the certificate to be trusted
+- On reinstall, the domain is automatically restored if it was previously configured
 
 ## How It Works
 
-1. **`install.sh`** checks for dependencies (Homebrew, Node.js, Docker), installs anything missing, walks you through connector credentials, sets up Open WebUI in Docker with Percona LLM servers pre-configured, applies branding, hides non-recommended models, and registers all MCP tool servers automatically.
+1. **`install.sh`** checks for dependencies (Homebrew, Node.js, Docker), installs anything missing, walks you through connector credentials, sets up Open WebUI in Docker with Percona LLM servers pre-configured, applies branding, hides non-recommended models, auto-creates your account, and registers all MCP tool servers automatically.
 
 2. **`start.sh`** reads `~/.ibex-mcp.env` and only launches servers whose credentials are configured. It also starts the Open WebUI Docker container.
 
@@ -158,8 +167,6 @@ docker run -d \
   -p 8080:8080 \
   -v ~/open-webui-data:/app/backend/data \
   -e OLLAMA_BASE_URL=https://mac-studio-ollama.int.percona.com \
-  -e OPENAI_API_BASE_URLS=https://mac-studio-lm.int.percona.com/v1 \
-  -e OPENAI_API_KEYS=none \
   -e WEBUI_NAME="Percona IBEX" \
   ghcr.io/open-webui/open-webui:main
 ```
@@ -204,7 +211,7 @@ All servers support three transport modes:
 ├── Caddyfile              # Reverse proxy config for https://ibex
 ├── branding/              # Percona IBEX logo and icon assets
 ├── server.js              # All-in-one MCP server (all tools)
-├── notion_indexer.js      # Notion workspace indexer
+├── notion_indexer.js       # Notion workspace indexer
 ├── servers/
 │   ├── shared.js          # Shared transport, startup, and error handling
 │   ├── slack.js           # Slack MCP server (port 3001)
