@@ -90,11 +90,11 @@ want to use. You can skip any connector you don't need.
               → Permissions: Contents → Read and write
 
  OPEN WEBUI   Requires Docker Desktop (will be installed if missing)
-              → Local LLM (recommended, no VPN needed):
-                Installs Ollama + downloads a model automatically
-              → Percona internal LLM servers (requires VPN):
+              → Percona internal LLM servers (default, requires VPN):
                 LM Studio: mac-studio-lm.int.percona.com
                 Ollama:    mac-studio-ollama.int.percona.com
+              → Local LLM (no VPN needed):
+                Installs Ollama + downloads a model automatically
 
 You only need credentials for the connectors you plan to use.
 ============================================================
@@ -443,38 +443,23 @@ setup_docker() {
     while true; do
     echo "  Which LLM backend should Open WebUI connect to?"
     echo ""
-    echo "    1) Local LLM (recommended — no VPN needed)"
-    echo "       Installs Ollama + downloads a model (requires 16 GB+ RAM)"
-    echo ""
-    echo "    2) Percona internal servers (requires VPN)"
+    echo "    1) Percona internal servers (requires VPN)"
     echo "       LM Studio + Ollama models on Percona network"
     echo ""
-    echo "    3) Both — local + Percona internal servers"
+    echo "    2) Local LLM (no VPN needed)"
+    echo "       Installs Ollama + downloads a model (requires 16 GB+ RAM)"
+    echo ""
+    echo "    3) Both — Percona internal + local servers"
     echo ""
     echo "    4) Custom / Skip (configure later)"
     echo ""
 
-    printf "  Choose [2]: "
+    printf "  Choose [1]: "
     read backend_choice
-    backend_choice="${backend_choice:-2}"
+    backend_choice="${backend_choice:-1}"
 
     case "$backend_choice" in
       1)
-        echo ""
-        if setup_local_ollama; then
-          ollama_url="http://host.docker.internal:${LOCAL_OLLAMA_PORT}"
-          default_model="$LOCAL_SELECTED_MODEL"
-          printf "\n  ${GREEN}✓${NC} Using local Ollama server\n"
-          printf "  ${GREEN}✓${NC} Default model: %s\n" "$default_model"
-        else
-          printf "\n  ${RED}✗${NC} Local Ollama setup failed\n"
-          printf "    You can set up Ollama manually later.\n\n"
-          read -rp "  Press Enter to go back to LLM selection..."
-          continue
-        fi
-        break
-        ;;
-      2)
         echo ""
         printf "  Checking VPN connection..."
         if curl -sf --connect-timeout 5 "$PERCONA_LM_URL/models" >/dev/null 2>&1; then
@@ -495,14 +480,23 @@ setup_docker() {
         printf "  ${GREEN}✓${NC} Default model: %s\n" "$default_model"
         break
         ;;
-      3)
+      2)
         echo ""
         if setup_local_ollama; then
-          printf "\n"
+          ollama_url="http://host.docker.internal:${LOCAL_OLLAMA_PORT}"
+          default_model="$LOCAL_SELECTED_MODEL"
+          printf "\n  ${GREEN}✓${NC} Using local Ollama server\n"
+          printf "  ${GREEN}✓${NC} Default model: %s\n" "$default_model"
         else
-          printf "\n  ${YELLOW}!${NC} Local setup failed — continuing with Percona servers only\n"
+          printf "\n  ${RED}✗${NC} Local Ollama setup failed\n"
+          printf "    You can set up Ollama manually later.\n\n"
+          read -rp "  Press Enter to go back to LLM selection..."
+          continue
         fi
-
+        break
+        ;;
+      3)
+        echo ""
         printf "  Checking VPN connection..."
         if curl -sf --connect-timeout 5 "$PERCONA_LM_URL/models" >/dev/null 2>&1; then
           printf " ${GREEN}connected${NC}\n"
@@ -513,6 +507,12 @@ setup_docker() {
           printf "    Or choose a different LLM backend option below.\n\n"
           read -rp "  Press Enter to go back to LLM selection..."
           continue
+        fi
+
+        if setup_local_ollama; then
+          printf "\n"
+        else
+          printf "\n  ${YELLOW}!${NC} Local setup failed — continuing with Percona servers only\n"
         fi
 
         openai_url="${PERCONA_LM_URL}"
@@ -567,6 +567,27 @@ setup_docker() {
     docker_cmd+=(ghcr.io/open-webui/open-webui:main)
     "${docker_cmd[@]}"
 
+    # Apply Percona branding (logos, icons, title)
+    if [ -d "$IBEX_DIR/branding" ]; then
+      sleep 3  # wait for container filesystem to be ready
+      # Replace logos and icons
+      for f in favicon.png logo.png splash.png splash-dark.png user.png \
+               web-app-manifest-192x192.png web-app-manifest-512x512.png \
+               favicon-96x96.png percona-icon.png; do
+        if [ -f "$IBEX_DIR/branding/$f" ]; then
+          docker cp "$IBEX_DIR/branding/$f" open-webui:/app/backend/open_webui/static/"$f" 2>/dev/null
+          docker cp "$IBEX_DIR/branding/$f" open-webui:/app/build/static/"$f" 2>/dev/null
+          docker cp "$IBEX_DIR/branding/$f" open-webui:/app/build/"$f" 2>/dev/null
+        fi
+      done
+      # Apply env.py patch for title/branding text
+      if [ -f "$IBEX_DIR/branding/env.py" ]; then
+        docker cp "$IBEX_DIR/branding/env.py" open-webui:/app/backend/open_webui/env.py 2>/dev/null
+      fi
+      docker restart open-webui >/dev/null 2>&1
+      printf "  ${GREEN}✓${NC} Percona branding applied\n"
+    fi
+
     printf "\n  ${GREEN}✓${NC} Open WebUI container created\n"
     if [ -n "$openai_url" ]; then
       printf "  ${GREEN}✓${NC} LLM connections pre-configured\n"
@@ -616,9 +637,9 @@ configure_models() {
   # Build system prompt and save to file
   local sys_prompt prompt_file
   # Pass "local" or "remote" to control thinking mode in system prompt
-  local llm_type="local"
+  local llm_type="remote"
   if [ "${backend_choice:-1}" = "2" ]; then
-    llm_type="remote"
+    llm_type="local"
   fi
   sys_prompt=$(build_system_prompt "$llm_type")
   prompt_file="$HOME/.ibex-system-prompt.txt"
@@ -741,7 +762,7 @@ print(len([t for t in tools if t.get('id')]))
   fi
 
   # Hide non-recommended models (Percona remote backends only)
-  if [ "${backend_choice:-1}" = "2" ] || [ "${backend_choice:-1}" = "3" ]; then
+  if [ "${backend_choice:-1}" = "1" ] || [ "${backend_choice:-1}" = "3" ]; then
     local hidden_count
     hidden_count=$(python3 -c "
 import sys, json, urllib.request
@@ -798,6 +819,50 @@ print(hidden)
 
   # Store credentials for display at the very end
   OWUI_LOGIN_EMAIL="$email"
+
+  # Optional: set up https://ibex local domain
+  echo ""
+  printf "  Would you like to set up ${BOLD}https://ibex${NC} as a local shortcut? (requires admin password)\n"
+  read -rp "  Set up https://ibex? (y/N): " setup_domain
+  if [ "${setup_domain,,}" = "y" ]; then
+    # Install mkcert and caddy if needed
+    if ! command -v mkcert &>/dev/null; then
+      printf "  Installing mkcert...\n"
+      brew install mkcert 2>/dev/null
+    fi
+    if ! command -v caddy &>/dev/null; then
+      printf "  Installing caddy...\n"
+      brew install caddy 2>/dev/null
+    fi
+    # Firefox support
+    if ! brew list nss &>/dev/null 2>&1; then
+      brew install nss 2>/dev/null
+    fi
+
+    # Generate certs and update hosts (single sudo prompt)
+    printf "\n  ${BOLD}Admin password needed to set up local domain:${NC}\n"
+    mkdir -p "$IBEX_DIR/certs"
+    cd "$IBEX_DIR/certs"
+    mkcert ibex 2>/dev/null
+    sudo sh -c "mkcert -install 2>/dev/null; grep -q '127.0.0.1 ibex' /etc/hosts || echo '127.0.0.1 ibex' >> /etc/hosts"
+    cd "$IBEX_DIR"
+
+    # Write Caddyfile
+    cat > "$IBEX_DIR/Caddyfile" << 'CADDYEOF'
+https://ibex {
+    tls {$HOME}/IBEX/certs/ibex.pem {$HOME}/IBEX/certs/ibex-key.pem
+    reverse_proxy localhost:8080
+}
+CADDYEOF
+
+    # Start caddy
+    caddy stop 2>/dev/null
+    caddy start --config "$IBEX_DIR/Caddyfile" 2>/dev/null
+    printf "  ${GREEN}✓${NC} https://ibex is now available\n"
+    IBEX_URL="https://ibex"
+  else
+    IBEX_URL="http://localhost:8080"
+  fi
 }
 
 # ── Phase 7: Start Servers & Show Results ───────────────────
@@ -828,7 +893,7 @@ start_and_show() {
   echo ""
 
   if [ "${SKIP_DOCKER:-false}" != "true" ]; then
-    echo " Open WebUI → http://localhost:8080"
+    echo " Percona IBEX → ${IBEX_URL:-http://localhost:8080}"
     echo " System prompt and tools have been configured."
     echo ""
     echo " Start a chat and ask it to use your tools!"
