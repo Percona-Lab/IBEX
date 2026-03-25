@@ -2,7 +2,7 @@
 # IBEX Interactive Installer
 # Installs dependencies, configures credentials, sets up Open WebUI
 
-set -e
+# Not using set -e — the installer handles errors explicitly with if/else blocks
 
 # ── Colors ──────────────────────────────────────────────────
 
