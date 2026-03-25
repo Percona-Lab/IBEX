@@ -846,36 +846,32 @@ print(hidden)
     mkdir -p "$IBEX_DIR/certs"
 
     # Generate cert
-    (cd "$IBEX_DIR/certs" && "$mkcert_path" ibex) || {
-      printf "  ${RED}✗${NC} Failed to generate certificate\n"
+    if ! (cd "$IBEX_DIR/certs" && "$mkcert_path" ibex 2>/dev/null); then
+      printf "  ${RED}✗${NC} Failed to generate certificate — skipping\n"
       IBEX_URL="http://localhost:8080"
-      return
-    }
-
     # Install CA and add hosts entry (single sudo prompt)
-    sudo bash -c "
-      \"$mkcert_path\" -install 2>/dev/null
-      grep -q '127.0.0.1 ibex' /etc/hosts || echo '127.0.0.1 ibex' >> /etc/hosts
-    " || {
+    elif ! sudo bash -c "\"$mkcert_path\" -install 2>/dev/null; grep -q '127.0.0.1 ibex' /etc/hosts || echo '127.0.0.1 ibex' >> /etc/hosts"; then
       printf "  ${RED}✗${NC} Failed to install CA or update hosts — skipping\n"
       IBEX_URL="http://localhost:8080"
-      return
-    }
-
-    # Write Caddyfile with resolved HOME path
-    cat > "$IBEX_DIR/Caddyfile" << CADDYEOF
+    else
+      # Write Caddyfile with absolute paths
+      cat > "$IBEX_DIR/Caddyfile" << CADDYEOF
 https://ibex {
-    tls $HOME/IBEX/certs/ibex.pem $HOME/IBEX/certs/ibex-key.pem
+    tls $IBEX_DIR/certs/ibex.pem $IBEX_DIR/certs/ibex-key.pem
     reverse_proxy localhost:8080
 }
 CADDYEOF
 
-    # Start caddy
-    caddy stop 2>/dev/null
-    caddy start --config "$IBEX_DIR/Caddyfile" 2>/dev/null && \
-      printf "  ${GREEN}✓${NC} https://ibex is now available\n" || \
-      printf "  ${RED}✗${NC} Caddy failed to start — use http://localhost:8080\n"
-    IBEX_URL="https://ibex"
+      # Start caddy
+      caddy stop 2>/dev/null
+      if caddy start --config "$IBEX_DIR/Caddyfile" 2>/dev/null; then
+        printf "  ${GREEN}✓${NC} https://ibex is now available\n"
+        IBEX_URL="https://ibex"
+      else
+        printf "  ${RED}✗${NC} Caddy failed to start — use http://localhost:8080\n"
+        IBEX_URL="http://localhost:8080"
+      fi
+    fi
   else
     IBEX_URL="http://localhost:8080"
   fi
@@ -929,15 +925,35 @@ start_and_show() {
   echo ""
   echo "============================================================"
 
-  # Show login credentials and open browser as the very last thing
+  # Auto-authenticate and open browser
   if [ -n "${OWUI_LOGIN_EMAIL:-}" ]; then
-    echo ""
-    echo "  Opening Open WebUI..."
-    open "http://localhost:8080" 2>/dev/null || xdg-open "http://localhost:8080" 2>/dev/null || true
+    local base_url="${IBEX_URL:-http://localhost:8080}"
+    local auth_token
+    auth_token=$(curl -sf -X POST http://localhost:8080/api/v1/auths/signin \
+      -H "Content-Type: application/json" \
+      -d "{\"email\":\"${OWUI_LOGIN_EMAIL}\",\"password\":\"changeme\"}" 2>/dev/null | \
+      python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
+
+    if [ -n "$auth_token" ]; then
+      # Create a small HTML that sets the JWT and redirects
+      local auth_html="/tmp/ibex-auth.html"
+      cat > "$auth_html" << AUTHEOF
+<!DOCTYPE html><html><body><script>
+localStorage.setItem('token', '$auth_token');
+window.location.href = '$base_url';
+</script><p>Signing in...</p></body></html>
+AUTHEOF
+      echo ""
+      echo "  Opening Percona IBEX..."
+      open "$auth_html" 2>/dev/null
+    else
+      echo ""
+      echo "  Opening Percona IBEX..."
+      open "$base_url" 2>/dev/null || true
+    fi
     echo ""
     echo "  ┌────────────────────────────────────────────────────┐"
-    echo "  │  Click 'Get started', then sign in with:           │"
-    echo "  │  Email: $OWUI_LOGIN_EMAIL"
+    echo "  │  Login: $OWUI_LOGIN_EMAIL"
     echo "  │  Password: changeme"
     echo "  │                                                    │"
     echo "  │  ⚠  Change your password in Settings → Account     │"
