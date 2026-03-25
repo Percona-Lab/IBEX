@@ -247,6 +247,58 @@ configure_credentials() {
   bash "$IBEX_DIR/configure.sh" --install-mode
 }
 
+# ── Helper: Collect Account Info ─────────────────────────────
+
+collect_account_info() {
+  local env_file="$HOME/.ibex-mcp.env"
+
+  # Read existing values from .env if available
+  local saved_name saved_email
+  if [ -f "$env_file" ]; then
+    saved_name=$(grep "^OWUI_NAME=" "$env_file" 2>/dev/null | cut -d= -f2-)
+    saved_email=$(grep "^OWUI_EMAIL=" "$env_file" 2>/dev/null | cut -d= -f2-)
+  fi
+
+  if [ -n "$saved_name" ] && [ -n "$saved_email" ]; then
+    # Show existing and ask if changes needed
+    printf "  Name:  ${BOLD}%s${NC}\n" "$saved_name"
+    printf "  Email: ${BOLD}%s${NC}\n" "$saved_email"
+    echo ""
+    read -rp "  Change account info? (y/N): " change_info
+    if [ "$change_info" = "y" ] || [ "$change_info" = "Y" ]; then
+      read -rp "  Enter your name [$saved_name]: " OWUI_NAME
+      OWUI_NAME="${OWUI_NAME:-$saved_name}"
+      read -rp "  Enter your email [$saved_email]: " OWUI_EMAIL
+      OWUI_EMAIL="${OWUI_EMAIL:-$saved_email}"
+    else
+      OWUI_NAME="$saved_name"
+      OWUI_EMAIL="$saved_email"
+    fi
+  else
+    # No saved values — ask for them
+    read -rp "  Enter your name: " OWUI_NAME
+    OWUI_NAME="${OWUI_NAME:-Admin}"
+    read -rp "  Enter your email: " OWUI_EMAIL
+  fi
+
+  # Save to .env file
+  if [ -n "$OWUI_NAME" ] && [ -n "$OWUI_EMAIL" ]; then
+    # Remove old entries if they exist
+    if [ -f "$env_file" ]; then
+      grep -v "^OWUI_NAME=\|^OWUI_EMAIL=\|^# Account" "$env_file" > "${env_file}.tmp" 2>/dev/null
+      mv "${env_file}.tmp" "$env_file"
+    fi
+    # Append new entries
+    cat >> "$env_file" << EOF
+
+# Account
+OWUI_NAME=$OWUI_NAME
+OWUI_EMAIL=$OWUI_EMAIL
+EOF
+  fi
+  echo ""
+}
+
 # ── Phase 5: Open WebUI Docker Setup ───────────────────────
 
 # Percona internal LLM server config (requires VPN)
@@ -601,10 +653,7 @@ setup_docker() {
     echo ""
     echo "  While Open WebUI starts up, let's create your account."
     echo ""
-    read -rp "  Enter your name: " OWUI_NAME
-    OWUI_NAME="${OWUI_NAME:-Admin}"
-    read -rp "  Enter your email: " OWUI_EMAIL
-    echo ""
+    collect_account_info
   fi
 
   echo ""
@@ -651,11 +700,7 @@ configure_models() {
   if [ -z "${OWUI_NAME:-}" ]; then
     echo "  Creating your Open WebUI admin account..."
     echo ""
-    read -rp "  Enter your name: " OWUI_NAME
-    OWUI_NAME="${OWUI_NAME:-Admin}"
-    read -rp "  Enter your email: " OWUI_EMAIL
-    echo ""
-
+    collect_account_info
     if [ -z "$OWUI_EMAIL" ]; then
       printf "  ${RED}✗${NC} Email is required\n"
       return
