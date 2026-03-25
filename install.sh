@@ -849,8 +849,8 @@ print(hidden)
     if ! (cd "$IBEX_DIR/certs" && "$mkcert_path" ibex 2>/dev/null); then
       printf "  ${RED}✗${NC} Failed to generate certificate — skipping\n"
       IBEX_URL="http://localhost:8080"
-    # Install CA and add hosts entry (single sudo prompt)
-    elif ! sudo bash -c "\"$mkcert_path\" -install 2>/dev/null; grep -q '127.0.0.1 ibex' /etc/hosts || echo '127.0.0.1 ibex' >> /etc/hosts"; then
+    # Install CA and add hosts entry using osascript for GUI password prompt
+    elif ! osascript -e "do shell script \"\\\"$mkcert_path\\\" -install 2>/dev/null; grep -q '127.0.0.1 ibex' /etc/hosts || echo '127.0.0.1 ibex' >> /etc/hosts\" with administrator privileges"; then
       printf "  ${RED}✗${NC} Failed to install CA or update hosts — skipping\n"
       IBEX_URL="http://localhost:8080"
     else
