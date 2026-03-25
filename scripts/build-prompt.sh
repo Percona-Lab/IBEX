@@ -115,6 +115,7 @@ build_system_prompt() {
   prompt+="\n- Make ONE tool call per question, then present the results. Do NOT call the same tool repeatedly."
   prompt+="\n- After receiving tool results, immediately format them as a table or summary. Do not make additional calls."
   prompt+="\n- When presenting results that include URLs (Notion pages, Jira tickets, etc.), ALWAYS include clickable URLs in your response."
+  prompt+="\n- ALWAYS present tool results in a well-formatted markdown table with ALL available fields (title, status, URL, dates, etc.). Never omit columns from the data."
 
   echo -e "$prompt"
 }

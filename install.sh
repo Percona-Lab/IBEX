@@ -985,26 +985,66 @@ start_and_show() {
   echo ""
   bash "$IBEX_DIR/scripts/launchd-service.sh" install
 
-  # Verify Docker can reach MCP servers on the host
-  if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^open-webui$'; then
-    echo ""
-    # Find the first running MCP server port to test connectivity
+  # ── Verify MCP servers are healthy ──────────────────────────
+  echo ""
+  echo "  Checking MCP server health..."
+  echo ""
+
+  # Map ports to server names
+  local -A port_names=( [3001]="Jira" [3002]="Slack" [3003]="Notion" [3005]="ServiceNow" [3006]="Percona Docs" )
+  local servers_ok=0 servers_fail=0
+
+  for port in 3001 3002 3003 3005 3006; do
+    local sname="${port_names[$port]}"
+    # Check if this server is configured (has a launchd plist)
+    if ! ls ~/Library/LaunchAgents/com.ibex.mcp-*.plist 2>/dev/null | xargs grep -l "\"$port\"" >/dev/null 2>&1; then
+      continue  # not configured, skip
+    fi
+
+    # Wait up to 5 seconds for the server to respond
+    local healthy=false
+    for i in 1 2 3 4 5; do
+      if curl -sf --connect-timeout 1 "http://localhost:${port}/health" >/dev/null 2>&1; then
+        healthy=true
+        break
+      fi
+      sleep 1
+    done
+
+    if $healthy; then
+      printf "  ${GREEN}✓${NC} %s server (port %s) — healthy\n" "$sname" "$port"
+      servers_ok=$((servers_ok + 1))
+    else
+      printf "  ${RED}✗${NC} %s server (port %s) — NOT responding\n" "$sname" "$port"
+      printf "    Try: launchctl kickstart -k gui/\$(id -u)/com.ibex.mcp-*\n"
+      printf "    Logs: cat /tmp/ibex-mcp-*.log\n"
+      servers_fail=$((servers_fail + 1))
+    fi
+  done
+
+  # Test Docker→host connectivity if any servers are running
+  if [ "$servers_ok" -gt 0 ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^open-webui$'; then
     local test_port=""
     for p in 3001 3002 3003 3005 3006; do
       if curl -sf --connect-timeout 1 "http://localhost:${p}/health" >/dev/null 2>&1; then
-        test_port=$p
-        break
+        test_port=$p; break
       fi
     done
     if [ -n "$test_port" ]; then
       if docker exec open-webui curl -sf --connect-timeout 3 "http://host.docker.internal:${test_port}/health" >/dev/null 2>&1; then
-        printf "  ${GREEN}✓${NC} Docker can reach MCP servers on host\n"
+        printf "\n  ${GREEN}✓${NC} Docker → host networking OK\n"
       else
-        printf "  ${RED}✗${NC} Docker CANNOT reach MCP servers on host\n"
-        printf "    Open WebUI won't be able to use tools.\n"
-        printf "    Check Docker Desktop → Settings → General → 'Allow host networking'\n"
+        printf "\n  ${RED}✗${NC} Docker CANNOT reach MCP servers on host\n"
+        printf "    This means Open WebUI won't be able to use any tools.\n"
+        printf "    Fix: Docker Desktop → Settings → General → enable 'Allow host networking'\n"
+        printf "    Then re-run this installer.\n"
       fi
     fi
+  fi
+
+  if [ "$servers_fail" -gt 0 ]; then
+    printf "\n  ${YELLOW}!${NC} %s server(s) failed health check — tools may not work\n" "$servers_fail"
+    printf "    Run: ~/IBEX/scripts/launchd-service.sh status\n"
   fi
 
   # Configure models with system prompt and tools
