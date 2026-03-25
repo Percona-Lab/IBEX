@@ -936,17 +936,19 @@ start_and_show() {
       python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))" 2>/dev/null)
 
     if [ -n "$auth_token" ]; then
-      # Create a small HTML that sets the JWT and redirects
+      # Inject auth page into container so it runs on the same origin
       local auth_html="/tmp/ibex-auth.html"
       cat > "$auth_html" << AUTHEOF
 <!DOCTYPE html><html><body><script>
 localStorage.setItem('token', '$auth_token');
-window.location.href = '$base_url';
+window.location.href = '/';
 </script><p>Signing in...</p></body></html>
 AUTHEOF
+      docker cp "$auth_html" open-webui:/app/backend/open_webui/static/auth.html 2>/dev/null
+      rm -f "$auth_html"
       echo ""
       echo "  Opening Percona IBEX..."
-      open "$auth_html" 2>/dev/null
+      open "${base_url}/static/auth.html" 2>/dev/null
     else
       echo ""
       echo "  Opening Percona IBEX..."
