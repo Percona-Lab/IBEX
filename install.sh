@@ -867,10 +867,34 @@ print(hidden)
   OWUI_LOGIN_EMAIL="$email"
 
   # Optional: set up https://ibex local domain
-  echo ""
-  printf "  Would you like to set up ${BOLD}https://ibex${NC} as a local shortcut? (requires admin password)\n"
-  read -rp "  Set up https://ibex? (y/N): " setup_domain
-  if [ "$setup_domain" = "y" ] || [ "$setup_domain" = "Y" ]; then
+  # Check if https://ibex was previously configured
+  local already_configured=false
+  if [ -f "$IBEX_DIR/certs/ibex.pem" ] && grep -q '127.0.0.1 ibex' /etc/hosts 2>/dev/null && command -v caddy &>/dev/null; then
+    already_configured=true
+  fi
+
+  if [ "$already_configured" = "true" ]; then
+    # Restore Caddyfile and restart caddy (no prompts needed)
+    cat > "$IBEX_DIR/Caddyfile" << CADDYEOF
+https://ibex {
+    tls $IBEX_DIR/certs/ibex.pem $IBEX_DIR/certs/ibex-key.pem
+    reverse_proxy localhost:8080
+}
+CADDYEOF
+    caddy stop 2>/dev/null
+    if caddy start --config "$IBEX_DIR/Caddyfile" 2>/dev/null; then
+      printf "  ${GREEN}✓${NC} https://ibex restored\n"
+      IBEX_URL="https://ibex"
+    else
+      IBEX_URL="http://localhost:8080"
+    fi
+  else
+    echo ""
+    printf "  Would you like to set up ${BOLD}https://ibex${NC} as a local shortcut? (requires admin password)\n"
+    read -rp "  Set up https://ibex? (y/N): " setup_domain
+  fi
+
+  if [ "$already_configured" != "true" ] && { [ "$setup_domain" = "y" ] || [ "$setup_domain" = "Y" ]; }; then
     # Install mkcert and caddy if needed
     if ! command -v mkcert &>/dev/null; then
       printf "  Installing mkcert...\n"
