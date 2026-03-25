@@ -1,0 +1,4 @@
+https://ibex {
+    tls ./certs/ibex.pem ./certs/ibex-key.pem
+    reverse_proxy localhost:8080
+}

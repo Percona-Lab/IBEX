@@ -454,9 +454,9 @@ setup_docker() {
     echo "    4) Custom / Skip (configure later)"
     echo ""
 
-    printf "  Choose [1]: "
+    printf "  Choose [2]: "
     read backend_choice
-    backend_choice="${backend_choice:-1}"
+    backend_choice="${backend_choice:-2}"
 
     case "$backend_choice" in
       1)

@@ -16,3 +16,8 @@ credentials.json
 # Notion (generated index and user config with page IDs)
 notion_index.json
 notion_roots.json
+certs/
+branding/env.py
+
+certs/
+branding/env.py
