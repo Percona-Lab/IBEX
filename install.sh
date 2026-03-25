@@ -750,38 +750,43 @@ token = sys.argv[1]
 recommended = set(sys.argv[2].split(','))
 default_model = sys.argv[3]
 base = 'http://localhost:8080'
+hdrs = lambda: {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
 
-# Get all models from backend
+def api(method, path, data=None):
+    req = urllib.request.Request(f'{base}{path}',
+        data=json.dumps(data).encode() if data else None,
+        headers=hdrs(), method=method)
+    try:
+        return json.loads(urllib.request.urlopen(req).read())
+    except Exception:
+        return None
+
+# Set default model and ordering via admin config
+api('POST', '/api/v1/configs/models', {
+    'DEFAULT_MODELS': default_model,
+    'DEFAULT_PINNED_MODELS': None,
+    'MODEL_ORDER_LIST': list(recommended),
+    'DEFAULT_MODEL_METADATA': {},
+    'DEFAULT_MODEL_PARAMS': {},
+})
+
+# Hide non-recommended models by creating per-model configs
+# (DEFAULT_MODEL_METADATA only applies to new users; this works for all)
 req = urllib.request.Request(f'{base}/api/models', headers={'Authorization': f'Bearer {token}'})
 models = json.loads(urllib.request.urlopen(req).read())
 models_list = models.get('data', models) if isinstance(models, dict) else models
 
-# Build hidden metadata for non-recommended models
-metadata = {}
+hidden = 0
 for m in models_list:
     mid = m.get('id', '')
-    if 'embed' in mid.lower() or 'arena' in mid.lower():
+    if mid in recommended:
         continue
-    if mid not in recommended:
-        metadata[mid] = {'hidden': True}
+    payload = {'id': mid, 'name': m.get('name', mid), 'meta': {'hidden': True}, 'params': {}}
+    api('POST', '/api/v1/models/create', payload)  # create config entry (may already exist)
+    if api('POST', f'/api/v1/models/model/update?id={mid}', payload):
+        hidden += 1
 
-# Update admin model config: set default, order recommended first, hide the rest
-payload = json.dumps({
-    'DEFAULT_MODELS': default_model,
-    'DEFAULT_PINNED_MODELS': None,
-    'MODEL_ORDER_LIST': list(recommended),
-    'DEFAULT_MODEL_METADATA': metadata,
-    'DEFAULT_MODEL_PARAMS': {},
-}).encode()
-
-req = urllib.request.Request(
-    f'{base}/api/v1/configs/models',
-    data=payload,
-    headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
-    method='POST',
-)
-urllib.request.urlopen(req)
-print(len(metadata))
+print(hidden)
 " "$token" "$PERCONA_RECOMMENDED_MODELS" "$PERCONA_DEFAULT_MODEL" 2>/dev/null)
     if [ -n "$hidden_count" ] && [ "$hidden_count" -gt 0 ] 2>/dev/null; then
       printf "  ${GREEN}✓${NC} Showing recommended models only (%s hidden — unhide in Admin → Models)\n" "$hidden_count"
