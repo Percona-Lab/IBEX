@@ -839,26 +839,42 @@ print(hidden)
       brew install nss 2>/dev/null
     fi
 
-    # Generate certs and update hosts (single sudo prompt)
+    # Generate certs and update hosts
     printf "\n  ${BOLD}Admin password needed to set up local domain:${NC}\n"
+    local mkcert_path
+    mkcert_path="$(which mkcert)"
     mkdir -p "$IBEX_DIR/certs"
-    cd "$IBEX_DIR/certs"
-    mkcert ibex 2>/dev/null
-    sudo sh -c "mkcert -install 2>/dev/null; grep -q '127.0.0.1 ibex' /etc/hosts || echo '127.0.0.1 ibex' >> /etc/hosts"
-    cd "$IBEX_DIR"
 
-    # Write Caddyfile
-    cat > "$IBEX_DIR/Caddyfile" << 'CADDYEOF'
+    # Generate cert
+    (cd "$IBEX_DIR/certs" && "$mkcert_path" ibex) || {
+      printf "  ${RED}✗${NC} Failed to generate certificate\n"
+      IBEX_URL="http://localhost:8080"
+      return
+    }
+
+    # Install CA and add hosts entry (single sudo prompt)
+    sudo bash -c "
+      \"$mkcert_path\" -install 2>/dev/null
+      grep -q '127.0.0.1 ibex' /etc/hosts || echo '127.0.0.1 ibex' >> /etc/hosts
+    " || {
+      printf "  ${RED}✗${NC} Failed to install CA or update hosts — skipping\n"
+      IBEX_URL="http://localhost:8080"
+      return
+    }
+
+    # Write Caddyfile with resolved HOME path
+    cat > "$IBEX_DIR/Caddyfile" << CADDYEOF
 https://ibex {
-    tls {$HOME}/IBEX/certs/ibex.pem {$HOME}/IBEX/certs/ibex-key.pem
+    tls $HOME/IBEX/certs/ibex.pem $HOME/IBEX/certs/ibex-key.pem
     reverse_proxy localhost:8080
 }
 CADDYEOF
 
     # Start caddy
     caddy stop 2>/dev/null
-    caddy start --config "$IBEX_DIR/Caddyfile" 2>/dev/null
-    printf "  ${GREEN}✓${NC} https://ibex is now available\n"
+    caddy start --config "$IBEX_DIR/Caddyfile" 2>/dev/null && \
+      printf "  ${GREEN}✓${NC} https://ibex is now available\n" || \
+      printf "  ${RED}✗${NC} Caddy failed to start — use http://localhost:8080\n"
     IBEX_URL="https://ibex"
   else
     IBEX_URL="http://localhost:8080"
