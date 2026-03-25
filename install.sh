@@ -595,7 +595,7 @@ setup_docker() {
 
     echo ""
     echo "  Pulling Open WebUI image..."
-    docker pull ghcr.io/open-webui/open-webui:main
+    docker pull ghcr.io/open-webui/open-webui:latest
 
     echo "  Creating container..."
     local -a docker_cmd=(docker run -d --name open-webui -p 8080:8080)
@@ -624,7 +624,7 @@ setup_docker() {
     # Limit tool call retries to prevent infinite loops (OWUI default is 30)
     docker_cmd+=(-e "CHAT_RESPONSE_MAX_TOOL_CALL_RETRIES=2")
 
-    docker_cmd+=(ghcr.io/open-webui/open-webui:main)
+    docker_cmd+=(ghcr.io/open-webui/open-webui:latest)
     if ! "${docker_cmd[@]}"; then
       printf "  ${RED}✗${NC} Failed to start Open WebUI container\n"
       printf "    Check: docker logs open-webui\n"
@@ -1028,6 +1028,7 @@ start_and_show() {
   echo " COMMANDS:"
   echo "   ~/IBEX/start.sh         Start all configured servers"
   echo "   ~/IBEX/configure.sh     Add or update connectors"
+  echo "   ~/IBEX/update.sh        Update Open WebUI to latest version"
   echo ""
   echo " FILES:"
   echo "   ~/.ibex-mcp.env         Credentials (chmod 600)"
