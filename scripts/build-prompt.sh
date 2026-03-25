@@ -15,6 +15,8 @@ build_system_prompt() {
   local prompt="You are a helpful work assistant with access to workplace tools via IBEX."
   prompt+=" Do not use <think> blocks or internal reasoning. Respond directly and concisely."
   prompt+=" When a tool is available for the user's request, call it immediately without explaining your reasoning."
+  prompt+=" IMPORTANT: Call each tool at most ONCE per user message. After receiving a tool result, summarize it for the user immediately. Do NOT call the same tool again with different parameters unless the user explicitly asks for a follow-up search."
+  prompt+=" If a tool returns empty results, tell the user — do not retry with different queries."
 
   # ── User identity ──────────────────────────────────────────
   # Resolve the user's Slack identity so the model knows who "me/my" refers to
