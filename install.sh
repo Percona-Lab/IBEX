@@ -230,8 +230,12 @@ install_ibex() {
   fi
 
   cd "$IBEX_DIR"
-  npm install
-  printf "  ${GREEN}✓${NC} Installed at %s\n" "$IBEX_DIR"
+  if npm install --loglevel=error 2>&1 | sed 's/^/    /'; then
+    printf "  ${GREEN}✓${NC} Installed at %s\n" "$IBEX_DIR"
+  else
+    printf "  ${RED}✗${NC} npm install failed — MCP servers won't work\n"
+    printf "    Try manually: cd ~/IBEX && npm install\n"
+  fi
 
   echo ""
 }
@@ -621,7 +625,11 @@ setup_docker() {
     docker_cmd+=(-e "CHAT_RESPONSE_MAX_TOOL_CALL_RETRIES=2")
 
     docker_cmd+=(ghcr.io/open-webui/open-webui:main)
-    "${docker_cmd[@]}"
+    if ! "${docker_cmd[@]}"; then
+      printf "  ${RED}✗${NC} Failed to start Open WebUI container\n"
+      printf "    Check: docker logs open-webui\n"
+      return 1
+    fi
 
     # Apply Percona branding (logos, icons, title)
     if [ -d "$IBEX_DIR/branding" ]; then
@@ -678,8 +686,14 @@ configure_models() {
   # Wait for Open WebUI to be ready (first launch downloads ~90 MB embedding model)
   printf "  Waiting for Open WebUI to start (first time may take 3-5 min)...\n"
   local retries=0
+  local max_retries=90  # 3 minutes max
   while ! curl -sf http://localhost:8080/api/version >/dev/null 2>&1; do
     retries=$((retries + 1))
+    if [ $retries -ge $max_retries ]; then
+      printf "\n  ${RED}✗${NC} Open WebUI did not start within 3 minutes\n"
+      printf "    Check: docker logs open-webui\n"
+      return 1
+    fi
     local elapsed=$((retries * 2))
     printf "\r  Waiting... %dm %02ds" $((elapsed/60)) $((elapsed%60))
     sleep 2
@@ -969,8 +983,27 @@ start_and_show() {
   echo ""
   bash "$IBEX_DIR/scripts/launchd-service.sh" install
 
-  # Wait for services to start
-  sleep 3
+  # Verify Docker can reach MCP servers on the host
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^open-webui$'; then
+    echo ""
+    # Find the first running MCP server port to test connectivity
+    local test_port=""
+    for p in 3001 3002 3003 3005 3006; do
+      if curl -sf --connect-timeout 1 "http://localhost:${p}/health" >/dev/null 2>&1; then
+        test_port=$p
+        break
+      fi
+    done
+    if [ -n "$test_port" ]; then
+      if docker exec open-webui curl -sf --connect-timeout 3 "http://host.docker.internal:${test_port}/health" >/dev/null 2>&1; then
+        printf "  ${GREEN}✓${NC} Docker can reach MCP servers on host\n"
+      else
+        printf "  ${RED}✗${NC} Docker CANNOT reach MCP servers on host\n"
+        printf "    Open WebUI won't be able to use tools.\n"
+        printf "    Check Docker Desktop → Settings → General → 'Allow host networking'\n"
+      fi
+    fi
+  fi
 
   # Configure models with system prompt and tools
   configure_models

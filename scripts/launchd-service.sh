@@ -102,53 +102,48 @@ cmd_install() {
 
   local installed=0
 
-  if [ -n "${SLACK_TOKEN:-}" ]; then
+  install_service() {
+    local name=$1 script=$2 port=$3
     local plist
-    plist=$(generate_plist "slack" "servers/slack.js" 3001)
+    plist=$(generate_plist "$name" "$script" "$port")
     sed -i '' "s|/usr/local/bin/node|${node_path}|g" "$plist"
     launchctl load "$plist" 2>/dev/null
-    printf "  ${GREEN}✓${NC} Slack service installed (port 3001)\n"
-    installed=$((installed + 1))
-  fi
+    # Verify the service actually started by checking the port
+    sleep 1
+    if curl -sf --connect-timeout 2 "http://localhost:${port}/health" >/dev/null 2>&1; then
+      printf "  ${GREEN}✓${NC} %s service running (port %s)\n" "$name" "$port"
+      installed=$((installed + 1))
+    else
+      # Give it a bit more time — node startup can be slow
+      sleep 2
+      if curl -sf --connect-timeout 2 "http://localhost:${port}/health" >/dev/null 2>&1; then
+        printf "  ${GREEN}✓${NC} %s service running (port %s)\n" "$name" "$port"
+        installed=$((installed + 1))
+      else
+        printf "  ${RED}✗${NC} %s service failed to start on port %s\n" "$name" "$port"
+        printf "    Check log: cat /tmp/ibex-${name}.log\n"
+        failed=$((failed + 1))
+      fi
+    fi
+  }
 
-  if [ -n "${NOTION_TOKEN:-}" ]; then
-    local plist
-    plist=$(generate_plist "notion" "servers/notion.js" 3002)
-    sed -i '' "s|/usr/local/bin/node|${node_path}|g" "$plist"
-    launchctl load "$plist" 2>/dev/null
-    printf "  ${GREEN}✓${NC} Notion service installed (port 3002)\n"
-    installed=$((installed + 1))
-  fi
+  local failed=0
 
-  if [ -n "${JIRA_DOMAIN:-}" ] && [ -n "${JIRA_EMAIL:-}" ] && [ -n "${JIRA_API_TOKEN:-}" ]; then
-    local plist
-    plist=$(generate_plist "jira" "servers/jira.js" 3003)
-    sed -i '' "s|/usr/local/bin/node|${node_path}|g" "$plist"
-    launchctl load "$plist" 2>/dev/null
-    printf "  ${GREEN}✓${NC} Jira service installed (port 3003)\n"
-    installed=$((installed + 1))
-  fi
-
-  if [ -n "${SERVICENOW_INSTANCE:-}" ] && [ -n "${SERVICENOW_USERNAME:-}" ] && [ -n "${SERVICENOW_PASSWORD:-}" ]; then
-    local plist
-    plist=$(generate_plist "servicenow" "servers/servicenow.js" 3005)
-    sed -i '' "s|/usr/local/bin/node|${node_path}|g" "$plist"
-    launchctl load "$plist" 2>/dev/null
-    printf "  ${GREEN}✓${NC} ServiceNow service installed (port 3005)\n"
-    installed=$((installed + 1))
-  fi
-
-  if [ -n "${SALESFORCE_INSTANCE_URL:-}" ] && [ -n "${SALESFORCE_ACCESS_TOKEN:-}" ]; then
-    local plist
-    plist=$(generate_plist "salesforce" "servers/salesforce.js" 3006)
-    sed -i '' "s|/usr/local/bin/node|${node_path}|g" "$plist"
-    launchctl load "$plist" 2>/dev/null
-    printf "  ${GREEN}✓${NC} Salesforce service installed (port 3006)\n"
-    installed=$((installed + 1))
-  fi
+  [ -n "${SLACK_TOKEN:-}" ] && install_service "slack" "servers/slack.js" 3001
+  [ -n "${NOTION_TOKEN:-}" ] && install_service "notion" "servers/notion.js" 3002
+  [ -n "${JIRA_DOMAIN:-}" ] && [ -n "${JIRA_EMAIL:-}" ] && [ -n "${JIRA_API_TOKEN:-}" ] && \
+    install_service "jira" "servers/jira.js" 3003
+  [ -n "${SERVICENOW_INSTANCE:-}" ] && [ -n "${SERVICENOW_USERNAME:-}" ] && [ -n "${SERVICENOW_PASSWORD:-}" ] && \
+    install_service "servicenow" "servers/servicenow.js" 3005
+  [ -n "${SALESFORCE_INSTANCE_URL:-}" ] && [ -n "${SALESFORCE_ACCESS_TOKEN:-}" ] && \
+    install_service "salesforce" "servers/salesforce.js" 3006
 
   echo ""
-  printf "  ${GREEN}${installed}${NC} service(s) installed. They will auto-start on login.\n"
+  if [ $failed -gt 0 ]; then
+    printf "  ${GREEN}${installed}${NC} service(s) running, ${RED}${failed}${NC} failed.\n"
+  else
+    printf "  ${GREEN}${installed}${NC} service(s) installed. They will auto-start on login.\n"
+  fi
   echo "  Logs: ~/.ibex-logs/"
 }
 
