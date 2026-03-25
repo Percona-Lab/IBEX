@@ -91,6 +91,7 @@ export async function createMCPServer({ name, tools, handler, defaultPort = 3001
           const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => crypto.randomUUID(),
             onsessioninitialized: (sid) => { sessions[sid] = transport; },
+            enableJsonResponse: true,
           });
           transport.onclose = () => {
             const sid = Object.keys(sessions).find(k => sessions[k] === transport);
