@@ -985,11 +985,38 @@ start_and_show() {
   echo ""
   bash "$IBEX_DIR/scripts/launchd-service.sh" install
 
-  # ── Verify MCP servers are healthy ──────────────────────────
+  # ── Verify MCP servers are healthy (with full auto-diagnostics) ──
   echo ""
   echo "  Checking MCP server health..."
   echo ""
 
+  # Pre-flight: check node is available
+  local node_path
+  node_path=$(which node 2>/dev/null)
+  if [ -z "$node_path" ]; then
+    for p in /opt/homebrew/bin/node /usr/local/bin/node; do
+      [ -x "$p" ] && node_path="$p" && break
+    done
+  fi
+  if [ -z "$node_path" ]; then
+    printf "  ${RED}✗ Node.js is not installed!${NC}\n"
+    printf "    MCP servers require Node.js. Install it:\n"
+    printf "    brew install node\n"
+    printf "    Then re-run the installer.\n\n"
+    return 1
+  fi
+  printf "  ${GREEN}✓${NC} Node.js: $node_path ($(${node_path} --version))\n"
+
+  # Pre-flight: check node_modules exist
+  if [ ! -d "$IBEX_DIR/servers/node_modules" ]; then
+    printf "  ${RED}✗ node_modules missing!${NC}\n"
+    printf "    Running npm install...\n"
+    (cd "$IBEX_DIR/servers" && npm install --production 2>&1) | tail -3
+  else
+    printf "  ${GREEN}✓${NC} node_modules present\n"
+  fi
+
+  echo ""
   local servers_ok=0 servers_fail=0
 
   for port in 3001 3002 3003 3005 3006; do
@@ -998,14 +1025,17 @@ start_and_show() {
       3001) sname="Slack" ;; 3002) sname="Notion" ;; 3003) sname="Jira" ;;
       3005) sname="ServiceNow" ;; 3006) sname="Percona Docs" ;;
     esac
+    local sname_lower
+    sname_lower=$(echo "$sname" | tr '[:upper:]' '[:lower:]')
+
     # Check if this server is configured (has a launchd plist)
     if ! ls ~/Library/LaunchAgents/com.ibex.mcp-*.plist 2>/dev/null | xargs grep -l "\"$port\"" >/dev/null 2>&1; then
       continue  # not configured, skip
     fi
 
-    # Wait up to 5 seconds for the server to respond
+    # Wait up to 8 seconds for the server to respond
     local healthy=false
-    for i in 1 2 3 4 5; do
+    for i in 1 2 3 4 5 6 7 8; do
       if curl -sf --connect-timeout 1 "http://localhost:${port}/health" >/dev/null 2>&1; then
         healthy=true
         break
@@ -1018,22 +1048,97 @@ start_and_show() {
       servers_ok=$((servers_ok + 1))
     else
       printf "  ${RED}✗${NC} %s server (port %s) — NOT responding\n" "$sname" "$port"
-      # Show actual error from logs to help diagnose
-      local sname_lower=$(echo "$sname" | tr '[:upper:]' '[:lower:]')
+
+      # ── Auto-diagnose why ──
+      local label="com.ibex.mcp.${sname_lower}"
       local errlog="$HOME/.ibex-logs/${sname_lower}.err"
       local outlog="$HOME/.ibex-logs/${sname_lower}.log"
-      if [ -f "$errlog" ] && [ -s "$errlog" ]; then
-        printf "    Last error: %s\n" "$(tail -1 "$errlog")"
-      elif [ -f "$outlog" ] && [ -s "$outlog" ]; then
-        printf "    Last log: %s\n" "$(tail -1 "$outlog")"
-      else
-        printf "    No logs found — launchd may not have started the service\n"
-      fi
-      # Check if launchd knows about it
-      local label="com.ibex.mcp.${sname_lower}"
+
+      # 1. Is launchd tracking it?
       if ! launchctl list 2>/dev/null | grep -q "$label"; then
-        printf "    launchd service not loaded — re-run: ~/IBEX/scripts/launchd-service.sh install\n"
+        printf "    ${YELLOW}⚠${NC}  launchd service not loaded\n"
+      else
+        local lpid
+        lpid=$(launchctl list 2>/dev/null | grep "$label" | awk '{print $1}')
+        if [ "$lpid" = "-" ] || [ -z "$lpid" ]; then
+          printf "    ${YELLOW}⚠${NC}  launchd loaded but process not running (crashed)\n"
+        else
+          printf "    ${YELLOW}⚠${NC}  process running (PID $lpid) but port not responding\n"
+        fi
       fi
+
+      # 2. Is something else using the port?
+      local port_owner
+      port_owner=$(lsof -ti:${port} 2>/dev/null | head -1)
+      if [ -n "$port_owner" ]; then
+        local port_cmd
+        port_cmd=$(ps -p "$port_owner" -o comm= 2>/dev/null)
+        printf "    ${YELLOW}⚠${NC}  port %s in use by PID %s (%s)\n" "$port" "$port_owner" "$port_cmd"
+      fi
+
+      # 3. Show last meaningful log lines
+      if [ -f "$errlog" ] && [ -s "$errlog" ]; then
+        # Filter out startup messages, show actual errors
+        local real_errors
+        real_errors=$(grep -v "Streamable HTTP on" "$errlog" | tail -3)
+        if [ -n "$real_errors" ]; then
+          printf "    ${YELLOW}⚠${NC}  error log:\n"
+          echo "$real_errors" | while read -r line; do
+            printf "       %s\n" "$line"
+          done
+        fi
+      fi
+      if [ -f "$outlog" ] && [ -s "$outlog" ]; then
+        local real_out
+        real_out=$(grep -iE "error|fatal|EADDRINUSE|EACCES|MODULE_NOT_FOUND|Cannot find" "$outlog" | tail -3)
+        if [ -n "$real_out" ]; then
+          printf "    ${YELLOW}⚠${NC}  stdout errors:\n"
+          echo "$real_out" | while read -r line; do
+            printf "       %s\n" "$line"
+          done
+        fi
+      fi
+
+      # 4. No logs at all?
+      if [ ! -s "$errlog" ] && [ ! -s "$outlog" ]; then
+        printf "    ${YELLOW}⚠${NC}  no logs found — server never started\n"
+        printf "       check plist: cat ~/Library/LaunchAgents/${label}.plist\n"
+      fi
+
+      # 5. Auto-recovery: try killing port + direct start
+      printf "    ${YELLOW}→${NC}  attempting recovery...\n"
+      lsof -ti:${port} 2>/dev/null | xargs kill -9 2>/dev/null || true
+      sleep 1
+
+      # Find the server script for this port
+      local server_script=""
+      case $port in
+        3001) server_script="servers/slack.js" ;;
+        3002) server_script="servers/notion.js" ;;
+        3003) server_script="servers/jira.js" ;;
+        3005) server_script="servers/servicenow.js" ;;
+        3006) server_script="servers/percona-docs.js" ;;
+      esac
+
+      if [ -n "$server_script" ] && [ -f "$IBEX_DIR/$server_script" ]; then
+        # Source env and start directly
+        set -a; source "$HOME/.ibex-mcp.env" 2>/dev/null; set +a
+        nohup "$node_path" "$IBEX_DIR/$server_script" --http \
+          >> "$errlog" 2>&1 &
+        local recovery_pid=$!
+        sleep 3
+        if curl -sf --connect-timeout 2 "http://localhost:${port}/health" >/dev/null 2>&1; then
+          printf "    ${GREEN}✓${NC}  recovered! running as PID %s\n" "$recovery_pid"
+          servers_fail=$((servers_fail - 1))  # undo the fail count
+          servers_ok=$((servers_ok + 1))
+        else
+          printf "    ${RED}✗${NC}  recovery failed — last 5 log lines:\n"
+          tail -5 "$errlog" 2>/dev/null | while read -r line; do
+            printf "       %s\n" "$line"
+          done
+        fi
+      fi
+
       servers_fail=$((servers_fail + 1))
     fi
   done
@@ -1051,7 +1156,7 @@ start_and_show() {
         printf "\n  ${GREEN}✓${NC} Docker → host networking OK\n"
       else
         printf "\n  ${RED}✗${NC} Docker CANNOT reach MCP servers on host\n"
-        printf "    This means Open WebUI won't be able to use any tools.\n"
+        printf "    Open WebUI won't be able to use tools.\n"
         printf "    Fix: Docker Desktop → Settings → General → enable 'Allow host networking'\n"
         printf "    Then re-run this installer.\n"
       fi
@@ -1060,7 +1165,10 @@ start_and_show() {
 
   if [ "$servers_fail" -gt 0 ]; then
     printf "\n  ${YELLOW}!${NC} %s server(s) failed health check — tools may not work\n" "$servers_fail"
-    printf "    Run: ~/IBEX/scripts/launchd-service.sh status\n"
+    printf "    Full diagnostics: ~/IBEX/scripts/launchd-service.sh status\n"
+    printf "    Logs: cat ~/.ibex-logs/*.err\n"
+  else
+    printf "\n  ${GREEN}✓${NC} All %s server(s) healthy\n" "$servers_ok"
   fi
 
   # Configure models with system prompt and tools
