@@ -104,33 +104,63 @@ cmd_install() {
 
   local installed=0
 
+  # Check if a port responds to health check (with retries)
+  wait_for_health() {
+    local port=$1 retries=5
+    for i in $(seq 1 $retries); do
+      if curl -sf --connect-timeout 2 "http://localhost:${port}/health" >/dev/null 2>&1; then
+        return 0
+      fi
+      sleep 1
+    done
+    return 1
+  }
+
+  # Start a server directly as a background process (fallback when launchd fails)
+  start_direct() {
+    local name=$1 script=$2 port=$3
+    # Kill any existing process on this port
+    lsof -ti:${port} 2>/dev/null | xargs kill -9 2>/dev/null || true
+    sleep 0.5
+    nohup "$node_path" "${IBEX_DIR}/${script}" --http \
+      >> "$HOME/.ibex-logs/${name}.log" \
+      2>> "$HOME/.ibex-logs/${name}.err" &
+  }
+
   install_service() {
     local name=$1 script=$2 port=$3
     local plist
+
+    # Kill anything on this port first
+    lsof -ti:${port} 2>/dev/null | xargs kill -9 2>/dev/null || true
+    sleep 0.5
+
+    # Try launchd first (preferred — auto-restarts on crash and reboot)
     plist=$(generate_plist "$name" "$script" "$port")
     sed -i '' "s|/usr/local/bin/node|${node_path}|g" "$plist"
-    # Modern macOS uses bootstrap/bootout; fall back to load/unload for older versions
     launchctl bootout "gui/$(id -u)" "$plist" 2>/dev/null || launchctl unload "$plist" 2>/dev/null
     launchctl bootstrap "gui/$(id -u)" "$plist" 2>/dev/null || launchctl load "$plist" 2>/dev/null
-    # Verify the service actually started by checking the port
-    sleep 1
-    if curl -sf --connect-timeout 2 "http://localhost:${port}/health" >/dev/null 2>&1; then
-      printf "  ${GREEN}✓${NC} %s service running (port %s)\n" "$name" "$port"
+
+    if wait_for_health "$port"; then
+      printf "  ${GREEN}✓${NC} %s running (port %s, launchd)\n" "$name" "$port"
+      installed=$((installed + 1))
+      return
+    fi
+
+    # Launchd failed — fall back to direct background process
+    printf "  ${YELLOW}!${NC} %s launchd failed, starting directly...\n" "$name"
+    start_direct "$name" "$script" "$port"
+
+    if wait_for_health "$port"; then
+      printf "  ${GREEN}✓${NC} %s running (port %s, background)\n" "$name" "$port"
+      printf "    ${YELLOW}Note:${NC} Won't auto-start after reboot. Run ~/IBEX/start.sh\n"
       installed=$((installed + 1))
     else
-      # Give it a bit more time — node startup can be slow
-      sleep 2
-      if curl -sf --connect-timeout 2 "http://localhost:${port}/health" >/dev/null 2>&1; then
-        printf "  ${GREEN}✓${NC} %s service running (port %s)\n" "$name" "$port"
-        installed=$((installed + 1))
-      else
-        printf "  ${RED}✗${NC} %s service failed to start on port %s\n" "$name" "$port"
-        printf "    Check log: cat ~/.ibex-logs/${name}.err\n"
-        if [ -f "$HOME/.ibex-logs/${name}.err" ] && [ -s "$HOME/.ibex-logs/${name}.err" ]; then
-          printf "    Last error: %s\n" "$(tail -1 "$HOME/.ibex-logs/${name}.err")"
-        fi
-        failed=$((failed + 1))
+      printf "  ${RED}✗${NC} %s failed to start on port %s\n" "$name" "$port"
+      if [ -f "$HOME/.ibex-logs/${name}.err" ] && [ -s "$HOME/.ibex-logs/${name}.err" ]; then
+        printf "    Last error: %s\n" "$(tail -1 "$HOME/.ibex-logs/${name}.err")"
       fi
+      failed=$((failed + 1))
     fi
   }
 
