@@ -990,12 +990,14 @@ start_and_show() {
   echo "  Checking MCP server health..."
   echo ""
 
-  # Map ports to server names
-  local -A port_names=( [3001]="Jira" [3002]="Slack" [3003]="Notion" [3005]="ServiceNow" [3006]="Percona Docs" )
   local servers_ok=0 servers_fail=0
 
   for port in 3001 3002 3003 3005 3006; do
-    local sname="${port_names[$port]}"
+    local sname=""
+    case $port in
+      3001) sname="Jira" ;; 3002) sname="Slack" ;; 3003) sname="Notion" ;;
+      3005) sname="ServiceNow" ;; 3006) sname="Percona Docs" ;;
+    esac
     # Check if this server is configured (has a launchd plist)
     if ! ls ~/Library/LaunchAgents/com.ibex.mcp-*.plist 2>/dev/null | xargs grep -l "\"$port\"" >/dev/null 2>&1; then
       continue  # not configured, skip
