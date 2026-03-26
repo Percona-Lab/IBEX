@@ -59,6 +59,8 @@ generate_plist() {
     <string>${IBEX_DIR}</string>
     <key>EnvironmentVariables</key>
     <dict>
+      <key>PATH</key>
+      <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
 $(echo -e "$env_xml")    </dict>
     <key>RunAtLoad</key>
     <true/>
@@ -107,7 +109,9 @@ cmd_install() {
     local plist
     plist=$(generate_plist "$name" "$script" "$port")
     sed -i '' "s|/usr/local/bin/node|${node_path}|g" "$plist"
-    launchctl load "$plist" 2>/dev/null
+    # Modern macOS uses bootstrap/bootout; fall back to load/unload for older versions
+    launchctl bootout "gui/$(id -u)" "$plist" 2>/dev/null || launchctl unload "$plist" 2>/dev/null
+    launchctl bootstrap "gui/$(id -u)" "$plist" 2>/dev/null || launchctl load "$plist" 2>/dev/null
     # Verify the service actually started by checking the port
     sleep 1
     if curl -sf --connect-timeout 2 "http://localhost:${port}/health" >/dev/null 2>&1; then
@@ -155,7 +159,7 @@ cmd_uninstall() {
   local removed=0
   for plist in "${PLIST_DIR}/${SERVICE_PREFIX}."*.plist; do
     [ -f "$plist" ] || continue
-    launchctl unload "$plist" 2>/dev/null
+    launchctl bootout "gui/$(id -u)" "$plist" 2>/dev/null || launchctl unload "$plist" 2>/dev/null
     rm -f "$plist"
     removed=$((removed + 1))
     printf "  ${GREEN}✓${NC} Removed $(basename "$plist" .plist)\n"
