@@ -121,7 +121,10 @@ cmd_install() {
         installed=$((installed + 1))
       else
         printf "  ${RED}✗${NC} %s service failed to start on port %s\n" "$name" "$port"
-        printf "    Check log: cat /tmp/ibex-${name}.log\n"
+        printf "    Check log: cat ~/.ibex-logs/${name}.err\n"
+        if [ -f "$HOME/.ibex-logs/${name}.err" ] && [ -s "$HOME/.ibex-logs/${name}.err" ]; then
+          printf "    Last error: %s\n" "$(tail -1 "$HOME/.ibex-logs/${name}.err")"
+        fi
         failed=$((failed + 1))
       fi
     fi

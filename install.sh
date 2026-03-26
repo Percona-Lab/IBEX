@@ -995,7 +995,7 @@ start_and_show() {
   for port in 3001 3002 3003 3005 3006; do
     local sname=""
     case $port in
-      3001) sname="Jira" ;; 3002) sname="Slack" ;; 3003) sname="Notion" ;;
+      3001) sname="Slack" ;; 3002) sname="Notion" ;; 3003) sname="Jira" ;;
       3005) sname="ServiceNow" ;; 3006) sname="Percona Docs" ;;
     esac
     # Check if this server is configured (has a launchd plist)
@@ -1018,8 +1018,22 @@ start_and_show() {
       servers_ok=$((servers_ok + 1))
     else
       printf "  ${RED}✗${NC} %s server (port %s) — NOT responding\n" "$sname" "$port"
-      printf "    Try: launchctl kickstart -k gui/\$(id -u)/com.ibex.mcp-*\n"
-      printf "    Logs: cat /tmp/ibex-mcp-*.log\n"
+      # Show actual error from logs to help diagnose
+      local sname_lower=$(echo "$sname" | tr '[:upper:]' '[:lower:]')
+      local errlog="$HOME/.ibex-logs/${sname_lower}.err"
+      local outlog="$HOME/.ibex-logs/${sname_lower}.log"
+      if [ -f "$errlog" ] && [ -s "$errlog" ]; then
+        printf "    Last error: %s\n" "$(tail -1 "$errlog")"
+      elif [ -f "$outlog" ] && [ -s "$outlog" ]; then
+        printf "    Last log: %s\n" "$(tail -1 "$outlog")"
+      else
+        printf "    No logs found — launchd may not have started the service\n"
+      fi
+      # Check if launchd knows about it
+      local label="com.ibex.mcp.${sname_lower}"
+      if ! launchctl list 2>/dev/null | grep -q "$label"; then
+        printf "    launchd service not loaded — re-run: ~/IBEX/scripts/launchd-service.sh install\n"
+      fi
       servers_fail=$((servers_fail + 1))
     fi
   done
