@@ -6,6 +6,8 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) server that connect
 
 Designed to run alongside [Open WebUI](https://github.com/open-webui/open-webui) with Percona's internal LLM servers (Ollama) for a self-hosted AI assistant with access to your internal tools. Branded as **Percona IBEX** in the UI.
 
+> ⚠️ **This project is in Proof of Concept (PoC) stage.** Expect rough edges, breaking changes, and limited documentation. Feedback welcome!
+
 ## Quick Start
 
 Open Terminal and paste:
