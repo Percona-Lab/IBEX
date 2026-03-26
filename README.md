@@ -6,21 +6,26 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) server that connect
 
 Designed to run alongside [Open WebUI](https://github.com/open-webui/open-webui) with Percona's internal LLM servers (Ollama) for a self-hosted AI assistant with access to your internal tools. Branded as **Percona IBEX** in the UI.
 
-## Quick Start (from zip)
+## Quick Start
 
-1. Download and unzip `IBEX.zip`
-2. Double-click **`Install IBEX.command`**
-3. Follow the prompts — enter credentials for each connector (skip any you don't need)
-4. When asked "Which LLM backend?", press **Enter** for the default (**Option 1: Percona internal servers** — requires VPN)
-5. Enter your name and email when prompted (saved to `~/.ibex-mcp.env` for future reinstalls)
-6. Optionally set up **https://ibex** as a local domain (requires admin password once)
+Open Terminal and paste:
+
+```bash
+curl -sL https://github.com/Percona-Lab/IBEX/archive/refs/heads/main.tar.gz | tar xz && bash IBEX-main/install.sh
+```
+
+Then follow the prompts:
+1. When asked "Which LLM backend?", press **Enter** for the default (**Option 1: Percona internal servers** — requires VPN)
+2. Enter credentials for each connector (skip any you don't need)
+3. Enter your name and email when prompted (saved to `~/.ibex-mcp.env` for future reinstalls)
+4. Optionally set up **https://ibex** as a local domain (requires admin password once)
 
 The installer automatically:
 - Applies **Percona IBEX** branding (logo + title)
 - Creates your account and logs you in
 - Opens the browser when ready
 
-> **Reinstalling?** No need to wipe `~/IBEX` first — the installer handles everything. On reinstall it detects your saved credentials (name/email) and offers to reuse them, and auto-restores the **https://ibex** domain if previously configured.
+> **Reinstalling?** Just run the same command again. Your credentials are preserved in `~/.ibex-mcp.env` — the installer detects them and offers to reuse.
 
 > **Note:** If macOS asks "iTerm would like to access data from other apps", click **Allow** — this is Docker accessing its credential store.
 
@@ -38,16 +43,15 @@ The installer automatically:
 
 | Model | Best for |
 |-------|----------|
-| **gpt-oss:latest** (default) | Slack, Jira, Notion — fastest, cleanest tool-calling output |
-| **qwen3-coder-30b** | ServiceNow queries |
+| **openai/gpt-oss-20b** (default) | Slack, Jira, Notion — best tool-calling reliability |
+| **qwen/qwen3-coder-30b** | ServiceNow queries, coding tasks |
 
 All other models are hidden by default. Unhide them in Admin Panel → Settings → Models if needed.
 
-### Quick Start (from GitHub)
+### Alternative: Clone from GitHub
 
 ```bash
-brew install gh && gh auth login
-gh repo clone Percona-Lab/IBEX ~/IBEX -b ollama-backend && cd ~/IBEX && bash install.sh
+git clone https://github.com/Percona-Lab/IBEX.git ~/IBEX && cd ~/IBEX && bash install.sh
 ```
 
 > Already installed? Run `~/IBEX/update.sh` to update Open WebUI and IBEX.
@@ -168,7 +172,7 @@ docker run -d \
   -v ~/open-webui-data:/app/backend/data \
   -e OLLAMA_BASE_URL=https://mac-studio-ollama.int.percona.com \
   -e WEBUI_NAME="Percona IBEX" \
-  ghcr.io/open-webui/open-webui:main
+  ghcr.io/open-webui/open-webui:latest
 ```
 
 Open http://localhost:8080 and create your admin account.
