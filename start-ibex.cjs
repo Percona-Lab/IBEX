@@ -305,6 +305,45 @@ async function main() {
   const noBrowser = args.has("--no-browser")
   const noOwui = args.has("--no-owui")
 
+  // ── Prevent duplicate supervisors ──────────────────────────
+  const pidFile = path.join(home, ".ibex-logs", "supervisor.pid")
+  try {
+    fs.mkdirSync(path.join(home, ".ibex-logs"), { recursive: true })
+  } catch {}
+
+  if (fs.existsSync(pidFile)) {
+    const oldPid = parseInt(fs.readFileSync(pidFile, "utf-8").trim())
+    if (oldPid) {
+      try {
+        process.kill(oldPid, 0)  // check if process exists (throws if not)
+        // Process exists — is it actually a supervisor?
+        const cmdCheck = execSync(`ps -p ${oldPid} -o args=`, { encoding: "utf-8" }).trim()
+        if (cmdCheck.includes("start-ibex")) {
+          warn(`Another IBEX supervisor is already running (PID ${oldPid})`)
+          warn("Stopping the old one first...")
+          try {
+            process.kill(oldPid, "SIGTERM")
+            // Wait for it to exit
+            for (let i = 0; i < 10; i++) {
+              try { process.kill(oldPid, 0); } catch { break }
+              execSync("sleep 1", { stdio: "ignore" })
+            }
+            // Force kill if still alive
+            try { process.kill(oldPid, 0); process.kill(oldPid, "SIGKILL") } catch {}
+          } catch {}
+        }
+      } catch {}  // process doesn't exist — stale pidfile, continue
+    }
+  }
+
+  fs.writeFileSync(pidFile, String(process.pid))
+  process.on("exit", () => {
+    try {
+      const currentPid = fs.readFileSync(pidFile, "utf-8").trim()
+      if (currentPid === String(process.pid)) fs.unlinkSync(pidFile)
+    } catch {}
+  })
+
   console.log(`
 ${C.bold}============================================================
  🦌 Starting IBEX
