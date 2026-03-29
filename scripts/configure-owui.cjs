@@ -145,18 +145,22 @@ async function buildSystemPrompt(env) {
 
   if (env.GITHUB_TOKEN && env.GITHUB_OWNER && env.GITHUB_REPO) {
     prompt += "\n\n## Memory"
-    prompt += "\n- memory_get: Read stored memory (GitHub-backed)"
-    prompt += "\n- memory_update: Write to memory"
+    prompt += "\n- memory_list: List all memory files. Call this first to see what's available."
+    prompt += "\n- memory_get: Read a memory file by path. Without path: returns all memory."
+    prompt += "\n- memory_search: Search across all memory files by keyword."
+    prompt += "\n- memory_update: Write to memory. ALWAYS call memory_get first to avoid overwriting."
     prompt += "\n\nMemory rules:"
-    prompt += '\n- Use memory_get when the user references previous context or asks "what do you know"'
+    prompt += '\n- Use memory_list or memory_search when the user references previous context, preferences, or asks "what do you know"'
+    prompt += "\n- Use memory_get to read specific files found via list/search"
     prompt += '\n- Use memory_update when the user says "remember this" or "save this"'
-    prompt += "\n- CRITICAL: Before EVERY memory_update, call memory_get first to avoid overwriting existing content"
-    prompt += "\n- Keep memory organized with ## headings and bullet points"
+    prompt += "\n- CRITICAL: Before EVERY memory_update, call memory_get first to get the current content and SHA"
+    prompt += "\n- The user's preferences and writing style are stored in memory — check context/preferences.md when asked about style, tone, or preferences"
   }
 
   prompt += "\n\nInstructions:"
   prompt += "\n- When the user asks about their work data, ALWAYS use the relevant tool. Never guess."
   prompt += '\n- When the user says "my" messages/tickets/etc, filter for the current user.'
+  prompt += "\n- When the user mentions their writing style, preferences, or tone, ALWAYS check memory first (context/preferences.md)."
   prompt += "\n- Keep responses concise and well-formatted."
   prompt += "\n- If a tool is not listed above, tell the user that connector is not configured."
   prompt += "\n- Make ONE tool call per question, then present the results. Do NOT call the same tool repeatedly."
