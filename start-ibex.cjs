@@ -450,9 +450,6 @@ ${C.bold}============================================================
       process.stdout.write(`\r  Waiting for Open WebUI... done (${elapsed}s)\n`)
       ok(`Open WebUI → ${ibexUrl}`)
 
-      // Apply branding AFTER OWUI is ready (it overwrites static files on startup)
-      applyBranding()
-
       // Wait for MCPO to be ready before configuring tool servers
       if (hasMcpoServers) {
         const mcpoReady = await waitForServer(`http://127.0.0.1:${MCPO_PORT}/openapi.json`, 30000)
@@ -478,6 +475,10 @@ ${C.bold}============================================================
         warn(`Configure failed: ${e.message}`)
         if (e.stderr) warn(e.stderr.toString().trim().slice(0, 200))
       }
+
+      // Apply branding AFTER configure — OWUI may still write static files
+      // for a few seconds after /api/config becomes available
+      applyBranding()
 
       if (!noBrowser) {
         if (token) {
