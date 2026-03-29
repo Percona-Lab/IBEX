@@ -38,14 +38,47 @@ function runQuiet(cmd) {
   return execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim()
 }
 
-async function ask(question, defaultVal = "") {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+async function ask(question, defaultVal = "", secret = false) {
   const suffix = defaultVal ? ` ${C.dim}[${defaultVal}]${C.reset}` : ""
-  return new Promise(resolve => {
-    rl.question(`  ${question}${suffix}: `, answer => {
-      rl.close()
-      resolve(answer.trim() || defaultVal)
+  if (!secret) {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+    return new Promise(resolve => {
+      rl.question(`  ${question}${suffix}: `, answer => {
+        rl.close()
+        resolve(answer.trim() || defaultVal)
+      })
     })
+  }
+  // Secret mode: mask input with asterisks
+  return new Promise(resolve => {
+    process.stdout.write(`  ${question}${suffix}: `)
+    const stdin = process.stdin
+    const wasRaw = stdin.isRaw
+    stdin.setRawMode(true)
+    stdin.resume()
+    stdin.setEncoding("utf-8")
+    let input = ""
+    const onData = (ch) => {
+      if (ch === "\r" || ch === "\n") {
+        stdin.setRawMode(wasRaw || false)
+        stdin.pause()
+        stdin.removeListener("data", onData)
+        process.stdout.write("\n")
+        resolve(input.trim() || defaultVal)
+      } else if (ch === "\u007f" || ch === "\b") {
+        if (input.length > 0) {
+          input = input.slice(0, -1)
+          process.stdout.write("\b \b")
+        }
+      } else if (ch === "\u0003") {
+        // Ctrl+C
+        process.exit(1)
+      } else {
+        input += ch
+        process.stdout.write("*")
+      }
+    }
+    stdin.on("data", onData)
   })
 }
 
@@ -343,7 +376,7 @@ async function promptCredentials(envPath) {
     for (const field of conn.fields) {
       const current = existing[field.key] || field.defaultVal || ""
       const display = field.secret && current ? `****${current.slice(-4)}` : current
-      const value = await ask(field.prompt, display)
+      const value = await ask(field.prompt, display, field.secret)
       if (value && !value.startsWith("****")) {
         env[field.key] = value
       } else if (current) {
