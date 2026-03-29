@@ -116,7 +116,7 @@ const CONNECTORS = [
     id: "jira", name: "Jira",
     help: "https://id.atlassian.com/manage-profile/security/api-tokens",
     fields: [
-      { key: "JIRA_DOMAIN", prompt: "Jira domain (e.g. yourcompany.atlassian.net)" },
+      { key: "JIRA_DOMAIN", prompt: "Jira domain", defaultVal: "perconadev.atlassian.net" },
       { key: "JIRA_EMAIL", prompt: "Jira email" },
       { key: "JIRA_API_TOKEN", prompt: "Jira API token", secret: true }
     ]
