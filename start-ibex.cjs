@@ -109,6 +109,8 @@ function applyBranding() {
     ["favicon.png", "favicon.png"],
     ["favicon.png", "favicon-dark.png"],
     ["favicon.png", "apple-touch-icon.png"],
+    ["favicon.ico", "favicon.ico"],
+    ["favicon.svg", "favicon.svg"],
     ["favicon-96x96.png", "favicon-96x96.png"],
     ["logo.png", "logo.png"],
     ["splash.png", "splash.png"],
