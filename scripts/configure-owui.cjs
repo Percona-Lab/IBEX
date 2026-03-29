@@ -155,6 +155,7 @@ async function buildSystemPrompt(env) {
     prompt += '\n- Use memory_update when the user says "remember this" or "save this"'
     prompt += "\n- CRITICAL: Before EVERY memory_update, call memory_get first to get the current content and SHA"
     prompt += "\n- The user's preferences and writing style are stored in memory — check context/preferences.md when asked about style, tone, or preferences"
+    prompt += "\n- IBEX install/usage info is in memory — search memory when asked about IBEX setup, installation, or architecture. Do NOT guess install steps."
   }
 
   prompt += "\n\nInstructions:"
