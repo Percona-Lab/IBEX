@@ -792,26 +792,31 @@ async function startIBEX(targetDir, env) {
       warn("MCPO not ready yet — tools may need a moment")
     }
 
-    // Read token from configure output (start-ibex.cjs already ran configure)
+    // Wait for start-ibex.cjs to finish configure (creates account, registers tools)
+    // then sign in to get auth token for auto-login
     let token = null
-    try {
-      const http = require("http")
-      const signin = await new Promise((resolve, reject) => {
-        const data = JSON.stringify({ email: env.OWUI_EMAIL, password: "changeme" })
-        const req = http.request({
-          hostname: "127.0.0.1", port: PORT, path: "/api/v1/auths/signin",
-          method: "POST", headers: { "Content-Type": "application/json", "Content-Length": data.length }
-        }, res => {
-          let body = ""
-          res.on("data", c => body += c)
-          res.on("end", () => { try { resolve(JSON.parse(body)) } catch { resolve({}) } })
+    const signinStart = Date.now()
+    while (!token && Date.now() - signinStart < 60000) {
+      try {
+        const http = require("http")
+        const signin = await new Promise((resolve, reject) => {
+          const data = JSON.stringify({ email: env.OWUI_EMAIL, password: "changeme" })
+          const req = http.request({
+            hostname: "127.0.0.1", port: PORT, path: "/api/v1/auths/signin",
+            method: "POST", headers: { "Content-Type": "application/json", "Content-Length": data.length }
+          }, res => {
+            let body = ""
+            res.on("data", c => body += c)
+            res.on("end", () => { try { resolve(JSON.parse(body)) } catch { resolve({}) } })
+          })
+          req.on("error", reject)
+          req.write(data)
+          req.end()
         })
-        req.on("error", reject)
-        req.write(data)
-        req.end()
-      })
-      token = signin.token
-    } catch {}
+        token = signin.token || null
+      } catch {}
+      if (!token) await new Promise(r => setTimeout(r, 3000))
+    }
 
     // Auto-authenticate via trampoline page
     if (token) {
