@@ -292,11 +292,20 @@ ${C.bold}============================================================
     activeMcpServers.push({ server: "memory", port: 3006 })
   }
 
+  // ── Check for Percona-DK (semantic Percona docs search) ─────
+  const perconaDkDir = path.join(home, "Percona-DK")
+  const perconaDkMcp = path.join(perconaDkDir, ".venv", "bin", "percona-dk-mcp")
+  const hasPerconaDk = fs.existsSync(perconaDkMcp)
+  if (hasPerconaDk) {
+    ok("percona-dk (Percona docs search) → via MCPO (stdio)")
+  }
+
   // ── Generate MCPO config and start proxy ────────────────────
   const MCPO_PORT = 8010
   const mcpoBin = path.join(home, ".local", "bin", "mcpo")
+  const hasMcpoServers = activeMcpServers.length > 0 || hasPerconaDk
 
-  if (activeMcpServers.length > 0 && fs.existsSync(mcpoBin)) {
+  if (hasMcpoServers && fs.existsSync(mcpoBin)) {
     const mcpoConfig = { mcpServers: {} }
     for (const s of activeMcpServers) {
       mcpoConfig.mcpServers[s.server] = {
@@ -304,8 +313,21 @@ ${C.bold}============================================================
         url: `http://127.0.0.1:${s.port}/mcp`
       }
     }
+
+    // Percona-DK is a stdio MCP server — MCPO spawns and proxies it
+    if (hasPerconaDk) {
+      mcpoConfig.mcpServers["percona-dk"] = {
+        command: perconaDkMcp,
+        args: [],
+        env: { DATA_DIR: path.join(perconaDkDir, "data") }
+      }
+    }
+
     const mcpoConfigPath = path.join(IBEX_DIR, "mcpo-config.json")
     fs.writeFileSync(mcpoConfigPath, JSON.stringify(mcpoConfig, null, 2) + "\n")
+
+    const allServers = [...activeMcpServers.map(s => s.server)]
+    if (hasPerconaDk) allServers.push("percona-dk")
 
     // Wait briefly for MCP servers to be ready before starting MCPO
     setTimeout(() => {
@@ -314,9 +336,9 @@ ${C.bold}============================================================
         "--config", mcpoConfigPath,
         "--host", "127.0.0.1"
       ], { env: mergedEnv })
-      ok(`MCPO proxy → http://localhost:${MCPO_PORT} (${activeMcpServers.map(s => s.server).join(", ")})`)
+      ok(`MCPO proxy → http://localhost:${MCPO_PORT} (${allServers.join(", ")})`)
     }, 3000)
-  } else if (activeMcpServers.length > 0) {
+  } else if (hasMcpoServers) {
     warn("MCPO not installed — tools may not work in Open WebUI")
     warn("Install with: uv tool install mcpo")
   }

@@ -3,6 +3,7 @@ const http = require("http")
 const https = require("https")
 const fs = require("fs")
 const path = require("path")
+const os = require("os")
 
 const args = process.argv.slice(2)
 let port = 8080
@@ -49,7 +50,6 @@ function log(icon, msg) {
 
 function loadEnv() {
   const env = { ...process.env }
-  const os = require("os")
   const envFile = path.join(os.homedir(), ".ibex-mcp.env")
   if (fs.existsSync(envFile)) {
     fs.readFileSync(envFile, "utf-8").split("\n").forEach(line => {
@@ -73,6 +73,7 @@ async function buildSystemPrompt(env) {
   prompt += " IMPORTANT: Call each tool at most ONCE per user message. After receiving a tool result, present it for the user immediately. Do NOT call another tool unless absolutely necessary."
   prompt += " If a tool returns empty results, tell the user — do not retry with different queries."
   prompt += "\n\n## Tool routing — pick the RIGHT tool:"
+  prompt += "\n- Percona product docs, installation, configuration, troubleshooting → search_percona_docs / get_percona_doc"
   prompt += "\n- Writing style, preferences, tone, personal context → memory_search / memory_get"
   prompt += "\n- How to install/use IBEX, architecture, setup → memory_search (NOT Slack)"
   prompt += "\n- Slack messages, conversations, channels → search_messages / get_channel_history"
@@ -150,6 +151,15 @@ async function buildSystemPrompt(env) {
     prompt += "\n- get_record: Get a record by ID"
     prompt += "\n- search: Search across objects"
     prompt += "\n- describe: Describe an object schema"
+  }
+
+  const perconaDkMcp = path.join(os.homedir(), "Percona-DK", ".venv", "bin", "percona-dk-mcp")
+  if (fs.existsSync(perconaDkMcp)) {
+    prompt += "\n\n## Percona Documentation"
+    prompt += "\n- search_percona_docs: Semantic search across all Percona documentation (MySQL, PXC, PXB, PMM, K8s operators, Valkey)"
+    prompt += "\n  Returns ranked results with relevance scores and page URLs"
+    prompt += "\n- get_percona_doc: Get full content of a specific Percona documentation page by repo and path"
+    prompt += "\n  Example: repo='percona/psmysql-docs', path='docs/install.md'"
   }
 
   if (env.GITHUB_TOKEN && env.GITHUB_OWNER && env.GITHUB_REPO) {
@@ -262,6 +272,19 @@ async function main() {
         key: "",
         config: { enable: true }
       }))
+
+    // Add Percona-DK if installed (stdio server proxied via MCPO)
+    const perconaDkBin = path.join(os.homedir(), "Percona-DK", ".venv", "bin", "percona-dk-mcp")
+    if (fs.existsSync(perconaDkBin)) {
+      connections.push({
+        url: `http://127.0.0.1:${MCPO_PORT}/percona-dk`,
+        path: "/openapi.json",
+        type: "openapi",
+        auth_type: "bearer",
+        key: "",
+        config: { enable: true }
+      })
+    }
 
     if (connections.length > 0) {
       await api("POST", "/api/v1/configs/tool_servers", {

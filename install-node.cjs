@@ -675,6 +675,73 @@ async function setupLocalDomain(targetDir, port, fallbackUrl) {
   }
 }
 
+// ── Phase 6b: Percona-DK Setup ──────────────────────────────
+
+async function setupPerconaDK() {
+  if (!has("uv")) {
+    warn("Skipping Percona-DK — uv not available")
+    return
+  }
+
+  const perconaDkDir = path.join(home, "Percona-DK")
+  const perconaDkMcp = path.join(perconaDkDir, ".venv", "bin", "percona-dk-mcp")
+
+  console.log(`${C.bold}Installing Percona-DK (documentation search)...${C.reset}\n`)
+
+  // Clone or update
+  if (fs.existsSync(path.join(perconaDkDir, "pyproject.toml"))) {
+    ok("Found existing Percona-DK")
+    try {
+      run("git pull", { cwd: perconaDkDir, stdio: "ignore" })
+      ok("Updated to latest version")
+    } catch {}
+  } else {
+    ok("Cloning Percona-DK repository...")
+    try {
+      run(`git clone https://github.com/Percona-Lab/percona-dk.git "${perconaDkDir}"`)
+    } catch (err) {
+      warn(`Could not clone Percona-DK: ${err.message}`)
+      console.log("")
+      return
+    }
+  }
+
+  // Create venv and install
+  const venvDir = path.join(perconaDkDir, ".venv")
+  try {
+    if (!fs.existsSync(perconaDkMcp)) {
+      run(`uv venv "${venvDir}" --python 3.12`, { cwd: perconaDkDir })
+    }
+    const activate = isWin
+      ? `"${path.join(venvDir, "Scripts", "activate")}"`
+      : `source "${path.join(venvDir, "bin", "activate")}"`
+    run(`${activate} && uv pip install -e .`, { cwd: perconaDkDir, shell: true })
+    ok("Percona-DK installed")
+  } catch (err) {
+    warn(`Percona-DK install failed: ${err.message}`)
+    console.log("")
+    return
+  }
+
+  // Run initial ingestion if no data exists
+  const chromaDir = path.join(perconaDkDir, "data", "chroma")
+  if (!fs.existsSync(chromaDir)) {
+    ok("Running initial documentation ingestion (this may take a few minutes)...")
+    try {
+      const ingestBin = path.join(venvDir, "bin", "percona-dk-ingest")
+      run(`"${ingestBin}"`, { cwd: perconaDkDir, shell: true, timeout: 600000 })
+      ok("Documentation indexed")
+    } catch (err) {
+      warn(`Ingestion failed: ${err.message}`)
+      warn("You can run it manually later: cd ~/Percona-DK && .venv/bin/percona-dk-ingest")
+    }
+  } else {
+    ok("Documentation index exists (auto-refreshes weekly)")
+  }
+
+  console.log("")
+}
+
 async function startIBEX(targetDir, env) {
   console.log(`${C.bold}Starting IBEX...${C.reset}\n`)
 
@@ -961,6 +1028,9 @@ async function main() {
   if (!flags.has("--skip-owui")) {
     await setupOpenWebUI(targetDir)
   }
+
+  // Install Percona-DK (semantic Percona documentation search)
+  await setupPerconaDK()
 
   // Always start + open browser unless --no-start
   if (!flags.has("--no-start") && !flags.has("--non-interactive")) {
