@@ -162,6 +162,7 @@ async function buildSystemPrompt(env) {
   prompt += "\n- When the user asks about their work data, ALWAYS use the relevant tool. Never guess."
   prompt += '\n- When the user says "my" messages/tickets/etc, filter for the current user.'
   prompt += "\n- When the user mentions their writing style, preferences, or tone, ALWAYS check memory first (context/preferences.md)."
+  prompt += "\n- CRITICAL: When you retrieve information from tools or memory, use the EXACT data returned. Do NOT paraphrase, invent, or substitute commands, URLs, or steps. Quote the actual content."
   prompt += "\n- Keep responses concise and well-formatted."
   prompt += "\n- If a tool is not listed above, tell the user that connector is not configured."
   prompt += "\n- Make ONE tool call per question, then present the results. Do NOT call the same tool repeatedly."
