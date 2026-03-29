@@ -434,7 +434,37 @@ async function setupOpenWebUI(targetDir, pipCmd) {
   console.log("")
 }
 
-// ── Phase 7: Start ───────────────────────────────────────────
+// ── Phase 7: Start & Open Browser ────────────────────────────
+
+function openBrowser(url) {
+  try {
+    if (os.platform() === "darwin") {
+      execSync(`open "${url}"`, { stdio: "ignore" })
+    } else if (isWin) {
+      execSync(`start "" "${url}"`, { stdio: "ignore" })
+    } else {
+      execSync(`xdg-open "${url}"`, { stdio: "ignore" })
+    }
+  } catch {}
+}
+
+async function waitForServer(url, maxWait = 60000) {
+  const http = require("http")
+  const start = Date.now()
+  while (Date.now() - start < maxWait) {
+    try {
+      await new Promise((resolve, reject) => {
+        const req = http.get(url, res => { res.resume(); resolve(true) })
+        req.on("error", reject)
+        req.setTimeout(2000, () => { req.destroy(); reject() })
+      })
+      return true
+    } catch {
+      await new Promise(r => setTimeout(r, 2000))
+    }
+  }
+  return false
+}
 
 async function startIBEX(targetDir, env) {
   console.log(`${C.bold}Starting IBEX...${C.reset}\n`)
@@ -465,6 +495,8 @@ async function startIBEX(targetDir, env) {
     ? path.join(targetDir, "app", "env", "Scripts", "open-webui")
     : path.join(targetDir, "app", "env", "bin", "open-webui")
 
+  const PORT = 8080
+
   if (fs.existsSync(owuiBin)) {
     const owuiEnv = {
       ...process.env,
@@ -479,26 +511,38 @@ async function startIBEX(targetDir, env) {
       owuiEnv.OLLAMA_BASE_URL = env.OLLAMA_BASE_URL
     }
 
-    const owui = spawn(owuiBin, ["serve", "--port", "8080", "--host", "127.0.0.1"], {
+    const owui = spawn(owuiBin, ["serve", "--port", String(PORT), "--host", "127.0.0.1"], {
       cwd: targetDir,
       stdio: "ignore",
       detached: true,
       env: owuiEnv
     })
     owui.unref()
-    ok("Open WebUI \u2192 http://127.0.0.1:8080")
+    ok("Starting Open WebUI...")
 
-    console.log("\n  Waiting for Open WebUI to start...")
-    await new Promise(r => setTimeout(r, 10000))
+    // Wait for server to be ready
+    process.stdout.write("  Waiting for Open WebUI to be ready...")
+    const ready = await waitForServer(`http://127.0.0.1:${PORT}/api/config`)
+    if (ready) {
+      process.stdout.write(" ready!\n")
+      ok(`Open WebUI \u2192 http://127.0.0.1:${PORT}`)
 
-    try {
-      run(`node scripts/configure-owui.js --port 8080`, { cwd: targetDir })
-    } catch {
-      warn("Auto-configuration skipped \u2014 configure manually at http://127.0.0.1:8080")
+      // Auto-configure: create account, set system prompt, configure models
+      try {
+        run(`node scripts/configure-owui.js --port ${PORT}`, { cwd: targetDir })
+      } catch {
+        warn("Auto-configuration skipped \u2014 configure manually")
+      }
+
+      // Open browser
+      ok("Opening browser...")
+      openBrowser(`http://127.0.0.1:${PORT}`)
+    } else {
+      process.stdout.write(" timed out\n")
+      warn("Open WebUI is still starting \u2014 open http://127.0.0.1:" + PORT + " manually")
     }
   } else {
     warn("Open WebUI not installed \u2014 skipping launch")
-    warn("Install it with: pip install open-webui")
   }
 
   console.log("")
@@ -517,7 +561,7 @@ async function main() {
      or: curl -fsSL https://raw.githubusercontent.com/Percona-Lab/IBEX/main/install-node.cjs | node
 
   Options:
-    --start            Launch IBEX after install
+    --no-start         Don't launch IBEX after install
     --non-interactive  Skip credential prompts (create template only)
     --skip-owui        Skip Open WebUI installation
     --help             Show this help
@@ -525,7 +569,7 @@ async function main() {
   Examples:
     node install-node.cjs                    Interactive install to ~/IBEX
     node install-node.cjs ./my-ibex          Install to custom directory
-    node install-node.cjs --start            Install and launch immediately
+    node install-node.cjs --no-start         Install without launching
     node install-node.cjs --non-interactive  Headless install (CI-friendly)
 `)
     return
@@ -568,7 +612,8 @@ async function main() {
     await setupOpenWebUI(targetDir, pipCmd)
   }
 
-  if (flags.has("--start")) {
+  // Always start + open browser unless --no-start
+  if (!flags.has("--no-start") && !flags.has("--non-interactive")) {
     await startIBEX(targetDir, env)
   }
 
@@ -579,7 +624,7 @@ async function main() {
   console.log(`  Installation:  ${targetDir}`)
   console.log(`  Credentials:   ${envPath}`)
   console.log("")
-  if (!flags.has("--start")) {
+  if (flags.has("--no-start") || flags.has("--non-interactive")) {
     console.log(`  To start IBEX:`)
     console.log(`    cd ${targetDir} && npm run start`)
     console.log("")
