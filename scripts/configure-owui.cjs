@@ -261,45 +261,47 @@ async function main() {
     { key: "SALESFORCE_INSTANCE_URL", name: "salesforce" }
   ]
 
+  // Build tool server connections list
+  const connections = MCP_SERVERS
+    .filter(s => env[s.key])
+    .map(s => ({
+      url: `http://127.0.0.1:${MCPO_PORT}/${s.name}`,
+      path: "/openapi.json",
+      type: "openapi",
+      auth_type: "bearer",
+      key: "",
+      config: { enable: true }
+    }))
+
+  // Add Percona-DK if installed (stdio server proxied via MCPO)
+  const perconaDkBin = path.join(os.homedir(), "Percona-DK", ".venv", "bin", "percona-dk-mcp")
+  if (fs.existsSync(perconaDkBin)) {
+    connections.push({
+      url: `http://127.0.0.1:${MCPO_PORT}/percona-dk`,
+      path: "/openapi.json",
+      type: "openapi",
+      auth_type: "bearer",
+      key: "",
+      config: { enable: true }
+    })
+  }
+
+  // OWUI assigns sequential IDs: server:0, server:1, etc.
+  const toolServerIds = connections.map((_, i) => `server:${i}`)
+
   try {
-    const connections = MCP_SERVERS
-      .filter(s => env[s.key])
-      .map(s => ({
-        url: `http://127.0.0.1:${MCPO_PORT}/${s.name}`,
-        path: "/openapi.json",
-        type: "openapi",
-        auth_type: "bearer",
-        key: "",
-        config: { enable: true }
-      }))
-
-    // Add Percona-DK if installed (stdio server proxied via MCPO)
-    const perconaDkBin = path.join(os.homedir(), "Percona-DK", ".venv", "bin", "percona-dk-mcp")
-    if (fs.existsSync(perconaDkBin)) {
-      connections.push({
-        url: `http://127.0.0.1:${MCPO_PORT}/percona-dk`,
-        path: "/openapi.json",
-        type: "openapi",
-        auth_type: "bearer",
-        key: "",
-        config: { enable: true }
-      })
-    }
-
     if (connections.length > 0) {
       await api("POST", "/api/v1/configs/tool_servers", {
         TOOL_SERVER_CONNECTIONS: connections
       }, token)
       log("\u2713", `Registered ${connections.length} tool server(s) via MCPO: ${connections.map(c => c.url.split('/').pop()).join(", ")}`)
 
-      // Auto-enable tool servers for every new chat
-      // OWUI assigns sequential IDs: server:0, server:1, etc.
-      const toolIds = connections.map((_, i) => `server:${i}`)
+      // Auto-enable tool servers for every new chat (user settings)
       try {
         let settings = await api("GET", "/api/v1/users/user/settings", null, token) || {}
-        settings.tool_ids = toolIds
+        settings.tool_ids = toolServerIds
         await api("POST", "/api/v1/users/user/settings/update", settings, token)
-        log("\u2713", `Tools auto-enabled: ${toolIds.join(", ")}`)
+        log("\u2713", `Tools auto-enabled: ${toolServerIds.join(", ")}`)
       } catch (e) {
         log("\u26a0", `Auto-enable tools: ${e.message}`)
       }
@@ -307,15 +309,6 @@ async function main() {
   } catch (e) {
     log("\u26a0", `Tool server registration: ${e.message}`)
   }
-
-  // Collect tool server IDs for auto-enable on models
-  let toolServerIds = []
-  try {
-    const toolsList = await api("GET", "/api/v1/tools/", null, token) || []
-    if (Array.isArray(toolsList)) {
-      toolServerIds = toolsList.map(t => t.id)
-    }
-  } catch {}
 
   // Hide all models except recommended ones and set default
   try {
