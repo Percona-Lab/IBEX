@@ -240,34 +240,58 @@ function checkDeps() {
 async function preflight(targetDir) {
   let issues = false
 
-  // Check for Docker containers running Open WebUI or IBEX
+  // Check for Docker containers running Open WebUI or IBEX (old install method)
   if (has("docker")) {
     try {
-      const containers = runQuiet("docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null")
-      if (containers) {
-        const owuiContainers = containers.split("\n").filter(line =>
-          /open.?webui|ibex|8080/i.test(line)
-        )
-        if (owuiContainers.length > 0) {
-          warn("Found Docker containers that may conflict:")
-          owuiContainers.forEach(c => console.log(`    ${C.dim}${c}${C.reset}`))
-          const stop = await confirm("Stop and remove these Docker containers?", true)
-          if (stop) {
-            for (const line of owuiContainers) {
-              const name = line.split(" ")[0]
-              try {
-                runQuiet(`docker stop ${name}`)
-                runQuiet(`docker rm ${name}`)
-                ok(`Removed container: ${name}`)
-              } catch {}
-            }
-          } else {
-            warn("Docker containers left running — port 8080 may conflict")
-            issues = true
+      // Check both running and stopped containers
+      const running = runQuiet("docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null") || ""
+      const stopped = runQuiet("docker ps -a --filter status=exited --format '{{.Names}}' 2>/dev/null") || ""
+      const allContainers = [...running.split("\n"), ...stopped.split("\n")]
+        .filter(line => line && /open.?webui|ibex|8080/i.test(line))
+        .map(line => line.split(" ")[0])
+        .filter((name, i, arr) => name && arr.indexOf(name) === i)  // dedupe
+
+      if (allContainers.length > 0) {
+        warn("Found Docker containers from previous IBEX install:")
+        allContainers.forEach(c => console.log(`    ${C.dim}${c}${C.reset}`))
+        console.log(`    ${C.dim}The new installer runs natively — Docker is no longer needed.${C.reset}`)
+        const stop = await confirm("Remove these Docker containers?", true)
+        if (stop) {
+          for (const name of allContainers) {
+            try {
+              runQuiet(`docker stop ${name} 2>/dev/null`)
+              runQuiet(`docker rm ${name} 2>/dev/null`)
+              ok(`Removed container: ${name}`)
+            } catch {}
           }
+          // Clean up Docker images too
+          try {
+            runQuiet("docker image rm ghcr.io/open-webui/open-webui:main 2>/dev/null")
+            runQuiet("docker image rm ghcr.io/open-webui/open-webui:latest 2>/dev/null")
+            ok("Removed old Docker images")
+          } catch {}
+        } else {
+          warn("Docker containers left — port 8080 may conflict")
+          issues = true
         }
       }
     } catch {}
+
+    // Clean up old Docker data directory
+    const oldDataDir = path.join(home, "open-webui-data")
+    if (fs.existsSync(oldDataDir)) {
+      warn("Found old Docker data directory: ~/open-webui-data/")
+      console.log(`    ${C.dim}This was used by the Docker-based install. The new install stores data differently.${C.reset}`)
+      const remove = await confirm("Remove ~/open-webui-data/?", true)
+      if (remove) {
+        try {
+          fs.rmSync(oldDataDir, { recursive: true, force: true })
+          ok("Removed ~/open-webui-data/")
+        } catch (e) {
+          warn(`Could not remove: ${e.message}`)
+        }
+      }
+    }
   }
 
   // Check if port 8080 is in use
