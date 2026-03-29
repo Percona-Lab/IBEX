@@ -750,19 +750,10 @@ async function startIBEX(targetDir, env) {
   console.log(`${C.bold}Starting IBEX...${C.reset}\n`)
 
   const PORT = 8080
-  const nodeBin = process.execPath
-  const startScript = path.join(targetDir, "start-ibex.cjs")
 
-  // Launch the supervisor (start-ibex.cjs) as a background process
-  // It handles MCP servers, MCPO, OWUI, branding, and tool configuration
-  const supervisor = spawn(nodeBin, [startScript, "--no-browser"], {
-    cwd: targetDir,
-    stdio: "ignore",
-    detached: true,
-    env: { ...process.env, ...env }
-  })
-  supervisor.unref()
-  ok("IBEX supervisor started")
+  // The supervisor (start-ibex.cjs) is already running via launchd/systemd
+  // (setupAutoStart runs before this function)
+  ok("IBEX supervisor started via auto-start service")
 
   // Wait for OWUI to be ready
   const waitStart = Date.now()
@@ -1013,14 +1004,15 @@ async function main() {
   // Install Percona-DK (semantic Percona documentation search)
   await setupPerconaDK()
 
-  // Always start + open browser unless --no-start
-  if (!flags.has("--no-start") && !flags.has("--non-interactive")) {
-    await startIBEX(targetDir, env)
-  }
-
-  // Set up auto-start on login
+  // Set up auto-start on login (starts the supervisor via launchd/systemd)
+  // Must happen BEFORE startIBEX so we don't spawn a duplicate supervisor
   if (!flags.has("--no-start") && !flags.has("--non-interactive")) {
     setupAutoStart(targetDir)
+  }
+
+  // Wait for OWUI to be ready and open browser
+  if (!flags.has("--no-start") && !flags.has("--non-interactive")) {
+    await startIBEX(targetDir, env)
   }
 
   console.log(`${C.bold}============================================================`)
