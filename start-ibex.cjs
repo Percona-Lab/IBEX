@@ -334,7 +334,9 @@ ${C.bold}============================================================
 
   // ── Check for Percona-DK (semantic Percona docs search) ─────
   const perconaDkDir = path.join(home, "Percona-DK")
-  const perconaDkMcp = path.join(perconaDkDir, ".venv", "bin", "percona-dk-mcp")
+  const perconaDkMcp = isWin
+    ? path.join(perconaDkDir, ".venv", "Scripts", "percona-dk-mcp.exe")
+    : path.join(perconaDkDir, ".venv", "bin", "percona-dk-mcp")
   const hasPerconaDk = fs.existsSync(perconaDkMcp)
   if (hasPerconaDk) {
     ok("percona-dk (Percona docs search) → via MCPO (stdio)")
@@ -342,7 +344,9 @@ ${C.bold}============================================================
 
   // ── Generate MCPO config and start proxy ────────────────────
   const MCPO_PORT = 8010
-  const mcpoBin = path.join(home, ".local", "bin", "mcpo")
+  const mcpoBin = isWin
+    ? path.join(home, ".local", "bin", "mcpo.exe")
+    : path.join(home, ".local", "bin", "mcpo")
   const hasMcpoServers = activeMcpServers.length > 0 || hasPerconaDk
 
   if (hasMcpoServers && fs.existsSync(mcpoBin)) {

@@ -684,7 +684,9 @@ async function setupPerconaDK() {
   }
 
   const perconaDkDir = path.join(home, "Percona-DK")
-  const perconaDkMcp = path.join(perconaDkDir, ".venv", "bin", "percona-dk-mcp")
+  const perconaDkMcp = isWin
+    ? path.join(perconaDkDir, ".venv", "Scripts", "percona-dk-mcp.exe")
+    : path.join(perconaDkDir, ".venv", "bin", "percona-dk-mcp")
 
   console.log(`${C.bold}Installing Percona-DK (documentation search)...${C.reset}\n`)
 
@@ -728,7 +730,9 @@ async function setupPerconaDK() {
   if (!fs.existsSync(chromaDir)) {
     ok("Running initial documentation ingestion (this may take a few minutes)...")
     try {
-      const ingestBin = path.join(venvDir, "bin", "percona-dk-ingest")
+      const ingestBin = isWin
+        ? path.join(venvDir, "Scripts", "percona-dk-ingest.exe")
+        : path.join(venvDir, "bin", "percona-dk-ingest")
       run(`"${ingestBin}"`, { cwd: perconaDkDir, shell: true, timeout: 600000 })
       ok("Documentation indexed")
     } catch (err) {

@@ -11,6 +11,7 @@ const portIdx = args.indexOf("--port")
 if (portIdx >= 0 && args[portIdx + 1]) port = parseInt(args[portIdx + 1])
 
 const BASE = `http://127.0.0.1:${port}`
+const isWin = os.platform() === "win32"
 
 const RECOMMENDED_MODELS = new Set(["openai/gpt-oss-20b", "qwen/qwen3-coder-30b"])
 const DEFAULT_MODEL = "openai/gpt-oss-20b"
@@ -153,7 +154,9 @@ async function buildSystemPrompt(env) {
     prompt += "\n- describe: Describe an object schema"
   }
 
-  const perconaDkMcp = path.join(os.homedir(), "Percona-DK", ".venv", "bin", "percona-dk-mcp")
+  const perconaDkMcp = isWin
+    ? path.join(os.homedir(), "Percona-DK", ".venv", "Scripts", "percona-dk-mcp.exe")
+    : path.join(os.homedir(), "Percona-DK", ".venv", "bin", "percona-dk-mcp")
   if (fs.existsSync(perconaDkMcp)) {
     prompt += "\n\n## Percona Documentation"
     prompt += "\n- search_percona_docs: Semantic search across all Percona documentation (MySQL, PXC, PXB, PMM, K8s operators, Valkey)"
@@ -274,7 +277,9 @@ async function main() {
     }))
 
   // Add Percona-DK if installed (stdio server proxied via MCPO)
-  const perconaDkBin = path.join(os.homedir(), "Percona-DK", ".venv", "bin", "percona-dk-mcp")
+  const perconaDkBin = isWin
+    ? path.join(os.homedir(), "Percona-DK", ".venv", "Scripts", "percona-dk-mcp.exe")
+    : path.join(os.homedir(), "Percona-DK", ".venv", "bin", "percona-dk-mcp")
   if (fs.existsSync(perconaDkBin)) {
     connections.push({
       url: `http://127.0.0.1:${MCPO_PORT}/percona-dk`,
