@@ -113,6 +113,6 @@ echo ""
 # Download and run the Node installer
 # Use </dev/tty so interactive prompts read from the terminal, not the pipe
 TMPFILE=$(mktemp /tmp/ibex-install.XXXXXX)
+trap 'rm -f "$TMPFILE"' EXIT INT TERM
 curl -fsSL https://raw.githubusercontent.com/Percona-Lab/IBEX/main/install-node.cjs > "$TMPFILE"
 node "$TMPFILE" "$@" </dev/tty
-rm -f "$TMPFILE"
