@@ -288,6 +288,11 @@ async function main() {
   console.log(`  Percona IBEX \u2192 http://127.0.0.1:${port}`)
   console.log(`  Login: ${email} / ${password}`)
   console.log("")
+
+  // Output token on last line for parent process to capture
+  if (token) {
+    console.log(`__TOKEN__=${token}`)
+  }
 }
 
 main().catch(err => {

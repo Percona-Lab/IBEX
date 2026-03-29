@@ -422,6 +422,110 @@ async function waitForServer(url, maxWait = 60000) {
   return false
 }
 
+function findOwuiStaticDir(targetDir) {
+  // Find Open WebUI's static directory inside the venv
+  const envLib = path.join(targetDir, "app", "env", "lib")
+  if (!fs.existsSync(envLib)) return null
+  try {
+    const pyDirs = fs.readdirSync(envLib).filter(d => d.startsWith("python"))
+    for (const pyDir of pyDirs) {
+      const staticDir = path.join(envLib, pyDir, "site-packages", "open_webui", "static")
+      if (fs.existsSync(staticDir)) return staticDir
+    }
+  } catch {}
+  return null
+}
+
+async function setupLocalDomain(targetDir, port, fallbackUrl) {
+  // Modern browsers resolve *.localhost to 127.0.0.1 automatically
+  // No hosts file, no admin password, no extra software needed
+  const localhostUrl = `http://ibex.localhost:${port}`
+
+  if (isWin) {
+    // Windows browsers don't support *.localhost reliably
+    return fallbackUrl
+  }
+
+  // Check if https://ibex was previously configured (mkcert + caddy)
+  const certsDir = path.join(targetDir, "certs")
+  const certFile = path.join(certsDir, "ibex.pem")
+  const keyFile = path.join(certsDir, "ibex-key.pem")
+  const caddyFile = path.join(targetDir, "Caddyfile")
+
+  const hasHttpsIbex = fs.existsSync(certFile) && has("caddy") &&
+    (() => { try { return runQuiet("cat /etc/hosts").includes("127.0.0.1 ibex") } catch { return false } })()
+
+  if (hasHttpsIbex) {
+    // Restore existing https://ibex setup
+    fs.writeFileSync(caddyFile, `https://ibex {\n    tls ${certFile} ${keyFile}\n    reverse_proxy localhost:${port}\n}\n`)
+    try {
+      try { run("caddy stop", { stdio: "ignore" }) } catch {}
+      run(`caddy start --config "${caddyFile}"`, { stdio: "ignore" })
+      ok("https://ibex restored")
+      return "https://ibex"
+    } catch {}
+  }
+
+  // Default: use ibex.localhost (zero-config, works in Chrome/Firefox/Edge)
+  ok(`Available at ${localhostUrl}`)
+
+  // Optionally upgrade to https://ibex
+  const setupHttps = await confirm("Also set up https://ibex? (requires admin password, mkcert, caddy)", false)
+  if (!setupHttps) return localhostUrl
+
+  // Install mkcert and caddy
+  if (os.platform() === "darwin" && has("brew")) {
+    if (!has("mkcert")) { ok("Installing mkcert..."); try { run("brew install mkcert", { stdio: "ignore" }) } catch {} }
+    if (!has("caddy")) { ok("Installing caddy..."); try { run("brew install caddy", { stdio: "ignore" }) } catch {} }
+    try { run("brew list nss 2>/dev/null || brew install nss", { shell: true, stdio: "ignore" }) } catch {}
+  } else if (os.platform() === "linux") {
+    if (!has("mkcert")) { try { run("sudo apt-get install -y mkcert 2>/dev/null || sudo snap install mkcert", { shell: true, stdio: "ignore" }) } catch {} }
+    if (!has("caddy")) { try { run("sudo apt-get install -y caddy", { shell: true, stdio: "ignore" }) } catch {} }
+  }
+
+  if (!has("mkcert") || !has("caddy")) {
+    warn("Could not install mkcert/caddy — using " + localhostUrl)
+    return localhostUrl
+  }
+
+  // Generate certs
+  if (!fs.existsSync(certsDir)) fs.mkdirSync(certsDir, { recursive: true })
+  try {
+    run(`mkcert -install`, { stdio: "ignore" })
+    run(`mkcert -cert-file "${certFile}" -key-file "${keyFile}" ibex`, { stdio: "ignore" })
+  } catch {
+    warn("Failed to generate certificate")
+    return localhostUrl
+  }
+
+  // Add hosts entry
+  try {
+    const hosts = runQuiet("cat /etc/hosts")
+    if (!hosts.includes("127.0.0.1 ibex")) {
+      if (os.platform() === "darwin") {
+        run(`osascript -e 'do shell script "echo 127.0.0.1 ibex >> /etc/hosts" with administrator privileges'`, { shell: true })
+      } else {
+        run(`sudo sh -c 'echo "127.0.0.1 ibex" >> /etc/hosts'`, { shell: true })
+      }
+    }
+  } catch {
+    warn("Failed to update /etc/hosts")
+    return localhostUrl
+  }
+
+  // Write Caddyfile and start
+  fs.writeFileSync(caddyFile, `https://ibex {\n    tls ${certFile} ${keyFile}\n    reverse_proxy localhost:${port}\n}\n`)
+  try {
+    try { run("caddy stop", { stdio: "ignore" }) } catch {}
+    run(`caddy start --config "${caddyFile}"`, { stdio: "ignore" })
+    ok("https://ibex is now available")
+    return "https://ibex"
+  } catch {
+    warn("Caddy failed to start")
+    return localhostUrl
+  }
+}
+
 async function startIBEX(targetDir, env) {
   console.log(`${C.bold}Starting IBEX...${C.reset}\n`)
 
@@ -484,21 +588,50 @@ async function startIBEX(targetDir, env) {
       ok(`Open WebUI \u2192 http://127.0.0.1:${PORT}`)
 
       // Auto-configure: create account, set system prompt, configure models
+      let token = null
       try {
-        run(`node scripts/configure-owui.js --port ${PORT}`, { cwd: targetDir })
+        const output = runQuiet(`node scripts/configure-owui.js --port ${PORT}`)
+        // Print the configure output (minus the token line)
+        for (const line of output.split("\n")) {
+          if (line.startsWith("__TOKEN__=")) {
+            token = line.replace("__TOKEN__=", "")
+          } else {
+            console.log(line)
+          }
+        }
       } catch {
-        warn("Auto-configuration skipped \u2014 configure manually")
+        warn("Auto-configuration skipped — configure manually")
       }
 
-      // Open browser
-      ok("Opening browser...")
-      openBrowser(`http://127.0.0.1:${PORT}`)
+      // Set up https://ibex local domain
+      let ibexUrl = `http://127.0.0.1:${PORT}`
+      ibexUrl = await setupLocalDomain(targetDir, PORT, ibexUrl)
+
+      // Auto-authenticate via trampoline page
+      if (token) {
+        const staticDir = findOwuiStaticDir(targetDir)
+        if (staticDir) {
+          const authHtml = `<!DOCTYPE html><html><body><script>
+localStorage.setItem('token', '${token}');
+window.location.href = '/';
+</script><p>Signing in...</p></body></html>`
+          fs.writeFileSync(path.join(staticDir, "auth.html"), authHtml)
+          ok("Opening browser (auto-authenticated)...")
+          openBrowser(`${ibexUrl}/static/auth.html`)
+        } else {
+          ok("Opening browser...")
+          openBrowser(ibexUrl)
+        }
+      } else {
+        ok("Opening browser...")
+        openBrowser(ibexUrl)
+      }
     } else {
       process.stdout.write(" timed out\n")
-      warn("Open WebUI is still starting \u2014 open http://127.0.0.1:" + PORT + " manually")
+      warn("Open WebUI is still starting — open http://127.0.0.1:" + PORT + " manually")
     }
   } else {
-    warn("Open WebUI not installed \u2014 skipping launch")
+    warn("Open WebUI not installed — skipping launch")
   }
 
   console.log("")
