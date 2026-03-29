@@ -8,8 +8,8 @@
     "ibex": "./server.js"
   },
   "scripts": {
-    "start": "node server.js",
-    "start:all": "bash start.sh"
+    "start": "node start-ibex.cjs",
+    "start:server": "node server.js"
   },
   "keywords": [
     "mcp",

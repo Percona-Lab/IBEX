@@ -640,6 +640,103 @@ window.location.href = '/';
   console.log("")
 }
 
+// ── Phase 8: Auto-Start on Login ─────────────────────────────
+
+function setupAutoStart(targetDir) {
+  const nodePath = process.execPath
+  const startScript = path.join(targetDir, "start-ibex.cjs")
+
+  if (os.platform() === "darwin") {
+    // macOS: launchd plist
+    const plistDir = path.join(home, "Library", "LaunchAgents")
+    const plistPath = path.join(plistDir, "com.percona.ibex.plist")
+
+    if (!fs.existsSync(plistDir)) fs.mkdirSync(plistDir, { recursive: true })
+
+    const logDir = path.join(home, ".ibex-logs")
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true })
+
+    const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.percona.ibex</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${nodePath}</string>
+        <string>${startScript}</string>
+        <string>--no-browser</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>${targetDir}</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>${logDir}/ibex.log</string>
+    <key>StandardErrorPath</key>
+    <string>${logDir}/ibex.err</string>
+</dict>
+</plist>`
+
+    fs.writeFileSync(plistPath, plist)
+
+    // Unload if already loaded, then load
+    try { execSync(`launchctl bootout gui/$(id -u) "${plistPath}"`, { stdio: "ignore" }) } catch {}
+    try {
+      execSync(`launchctl bootstrap gui/$(id -u) "${plistPath}"`, { stdio: "ignore" })
+      ok("IBEX will auto-start on login (launchd)")
+    } catch {
+      try {
+        execSync(`launchctl load "${plistPath}"`, { stdio: "ignore" })
+        ok("IBEX will auto-start on login (launchd)")
+      } catch {
+        warn("Could not register auto-start — run manually: node ~/IBEX/start-ibex.cjs")
+      }
+    }
+  } else if (os.platform() === "linux") {
+    // Linux: systemd user service
+    const serviceDir = path.join(home, ".config", "systemd", "user")
+    const servicePath = path.join(serviceDir, "ibex.service")
+
+    if (!fs.existsSync(serviceDir)) fs.mkdirSync(serviceDir, { recursive: true })
+
+    const service = `[Unit]
+Description=Percona IBEX
+After=network.target
+
+[Service]
+ExecStart=${nodePath} ${startScript} --no-browser
+WorkingDirectory=${targetDir}
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+`
+
+    fs.writeFileSync(servicePath, service)
+    try {
+      execSync("systemctl --user daemon-reload", { stdio: "ignore" })
+      execSync("systemctl --user enable ibex.service", { stdio: "ignore" })
+      ok("IBEX will auto-start on login (systemd)")
+    } catch {
+      warn("Could not register auto-start — run manually: node ~/IBEX/start-ibex.cjs")
+    }
+  } else if (isWin) {
+    // Windows: VBScript in Startup folder (runs without console window)
+    try {
+      const startupDir = path.join(home, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+      const vbsPath = path.join(startupDir, "IBEX.vbs")
+      const vbs = `Set WshShell = CreateObject("WScript.Shell")\nWshShell.Run """${nodePath}"" ""${startScript}"" --no-browser", 0, False`
+      fs.writeFileSync(vbsPath, vbs)
+      ok("IBEX will auto-start on login (Startup folder)")
+    } catch {
+      warn("Could not register auto-start — run manually: node ~/IBEX/start-ibex.cjs")
+    }
+  }
+}
+
 // ── Main ─────────────────────────────────────────────────────
 
 async function main() {
@@ -709,6 +806,11 @@ async function main() {
     await startIBEX(targetDir, env)
   }
 
+  // Set up auto-start on login
+  if (!flags.has("--no-start") && !flags.has("--non-interactive")) {
+    setupAutoStart(targetDir)
+  }
+
   console.log(`${C.bold}============================================================`)
   console.log(` \ud83e\udd8c IBEX is ready!`)
   console.log(`============================================================${C.reset}`)
@@ -716,11 +818,11 @@ async function main() {
   console.log(`  Installation:  ${targetDir}`)
   console.log(`  Credentials:   ${envPath}`)
   console.log("")
-  if (flags.has("--no-start") || flags.has("--non-interactive")) {
-    console.log(`  To start IBEX:`)
-    console.log(`    cd ${targetDir} && npm run start`)
-    console.log("")
-  }
+  console.log(`  To start IBEX manually:`)
+  console.log(`    node ${path.join(targetDir, "start-ibex.cjs")}`)
+  console.log("")
+  console.log(`  IBEX will auto-start on login.`)
+  console.log("")
 }
 
 main().catch(err => {
