@@ -351,7 +351,7 @@ async function cloneAndInstall(targetDir) {
   console.log(`${C.bold}Installing IBEX...${C.reset}\n`)
 
   // Pin to stable version — override with IBEX_VERSION env var
-  const ibexVersion = process.env.IBEX_VERSION || "v1.0"
+  const ibexVersion = process.env.IBEX_VERSION || "v0.9-beta"
 
   if (fs.existsSync(path.join(targetDir, "package.json"))) {
     try {
