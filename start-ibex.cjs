@@ -105,7 +105,11 @@ function applyBranding() {
   const brandDir = path.join(IBEX_DIR, "branding")
   if (!fs.existsSync(brandDir)) return
 
-  const copies = [
+  const pkgDir = path.join(staticDir, "..")  // open_webui package root
+  const frontendStaticDir = path.join(pkgDir, "frontend", "static")
+  const frontendDir = path.join(pkgDir, "frontend")
+
+  const assets = [
     ["favicon.png", "favicon.png"],
     ["favicon.png", "favicon-dark.png"],
     ["favicon.png", "apple-touch-icon.png"],
@@ -120,26 +124,37 @@ function applyBranding() {
     ["web-app-manifest-512x512.png", "web-app-manifest-512x512.png"],
   ]
 
+  // Replace in BOTH source (frontend/static/) and destination (static/)
+  // OWUI's config.py copies frontend/static/ → static/ on startup,
+  // so replacing the source ensures branding survives restarts.
   let count = 0
-  for (const [src, dst] of copies) {
+  for (const [src, dst] of assets) {
     const srcPath = path.join(brandDir, src)
-    const dstPath = path.join(staticDir, dst)
+    if (!fs.existsSync(srcPath)) continue
+    for (const targetDir of [frontendStaticDir, staticDir]) {
+      const dstPath = path.join(targetDir, dst)
+      try { fs.copyFileSync(srcPath, dstPath); count++ } catch {}
+    }
+  }
+  // Also replace frontend/favicon.png and frontend/user.png (alternate source)
+  for (const f of ["favicon.png", "user.png"]) {
+    const srcPath = path.join(brandDir, f)
+    const dstPath = path.join(frontendDir, f)
     if (fs.existsSync(srcPath)) {
       try { fs.copyFileSync(srcPath, dstPath); count++ } catch {}
     }
   }
-  if (count > 0) ok(`Applied IBEX branding (${count} assets)`)
+  if (count > 0) ok(`Applied IBEX branding (${count} assets to source + runtime)`)
 
-  // Patch "Open WebUI" text in HTML/manifest files
-  const frontendDir = path.join(staticDir, "..", "frontend")
+  // Patch "Open WebUI" text in HTML/manifest files (both source and runtime copies)
   const textPatches = [
     [path.join(frontendDir, "index.html"), /<title>Open WebUI<\/title>/, "<title>IBEX</title>"],
     [path.join(frontendDir, "opensearch.xml"), /<ShortName>Open WebUI<\/ShortName>/, "<ShortName>IBEX</ShortName>"],
     [path.join(frontendDir, "opensearch.xml"), /<Description>Search Open WebUI<\/Description>/, "<Description>Search IBEX</Description>"],
     [path.join(staticDir, "site.webmanifest"), /"name":\s*"Open WebUI"/, '"name": "IBEX"'],
     [path.join(staticDir, "site.webmanifest"), /"short_name":\s*"WebUI"/, '"short_name": "IBEX"'],
-    [path.join(frontendDir, "static", "site.webmanifest"), /"name":\s*"Open WebUI"/, '"name": "IBEX"'],
-    [path.join(frontendDir, "static", "site.webmanifest"), /"short_name":\s*"WebUI"/, '"short_name": "IBEX"'],
+    [path.join(frontendStaticDir, "site.webmanifest"), /"name":\s*"Open WebUI"/, '"name": "IBEX"'],
+    [path.join(frontendStaticDir, "site.webmanifest"), /"short_name":\s*"WebUI"/, '"short_name": "IBEX"'],
   ]
 
   for (const [filePath, pattern, replacement] of textPatches) {
@@ -147,15 +162,13 @@ function applyBranding() {
       if (!fs.existsSync(filePath)) continue
       const content = fs.readFileSync(filePath, "utf-8")
       const patched = content.replace(pattern, replacement)
-      if (patched !== content) {
-        fs.writeFileSync(filePath, patched)
-      }
+      if (patched !== content) fs.writeFileSync(filePath, patched)
     } catch {}
   }
 
   // Remove OWUI's forced " (Open WebUI)" suffix on custom WEBUI_NAME
   // env.py: if WEBUI_NAME != 'Open WebUI': WEBUI_NAME += ' (Open WebUI)'
-  const envPy = path.join(staticDir, "..", "env.py")
+  const envPy = path.join(pkgDir, "env.py")
   try {
     if (fs.existsSync(envPy)) {
       const content = fs.readFileSync(envPy, "utf-8")
@@ -165,6 +178,17 @@ function applyBranding() {
       )
       if (patched !== content) {
         fs.writeFileSync(envPy, patched)
+      }
+      // Always clear .pyc cache so Python loads the patched env.py
+      const pycacheDir = path.join(pkgDir, "__pycache__")
+      if (fs.existsSync(pycacheDir)) {
+        try {
+          for (const f of fs.readdirSync(pycacheDir)) {
+            if (f.startsWith("env.") && f.endsWith(".pyc")) {
+              fs.unlinkSync(path.join(pycacheDir, f))
+            }
+          }
+        } catch {}
       }
     }
   } catch {}
@@ -396,6 +420,10 @@ ${C.bold}============================================================
     : path.join(IBEX_DIR, "app", "env", "bin", "open-webui")
 
   if (!noOwui && fs.existsSync(owuiBin)) {
+    // Apply branding BEFORE starting OWUI — replace source files in frontend/static/
+    // so OWUI's own config.py copies our branded assets into static/ on startup
+    applyBranding()
+
     const owuiEnv = {
       ...process.env,
       WEBUI_NAME: "IBEX",
@@ -475,10 +503,6 @@ ${C.bold}============================================================
         warn(`Configure failed: ${e.message}`)
         if (e.stderr) warn(e.stderr.toString().trim().slice(0, 200))
       }
-
-      // Apply branding AFTER configure — OWUI may still write static files
-      // for a few seconds after /api/config becomes available
-      applyBranding()
 
       if (!noBrowser) {
         if (token) {
