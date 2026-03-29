@@ -364,7 +364,7 @@ async function main() {
 
   log("\u2713", "Configuration complete")
   console.log("")
-  console.log(`  Percona IBEX \u2192 http://127.0.0.1:${port}`)
+  console.log(`  IBEX \u2192 http://127.0.0.1:${port}`)
   console.log(`  Login: ${email} / ${password}`)
   console.log("")
 

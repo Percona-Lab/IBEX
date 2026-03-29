@@ -776,7 +776,7 @@ async function startIBEX(targetDir, env) {
   if (fs.existsSync(owuiBin)) {
     const owuiEnv = {
       ...process.env,
-      WEBUI_NAME: "Percona IBEX",
+      WEBUI_NAME: "IBEX",
       CHAT_RESPONSE_MAX_TOOL_CALL_RETRIES: "2",
       ENABLE_VERSION_UPDATE_CHECK: "false"
     }
@@ -928,7 +928,7 @@ function setupAutoStart(targetDir) {
     if (!fs.existsSync(serviceDir)) fs.mkdirSync(serviceDir, { recursive: true })
 
     const service = `[Unit]
-Description=Percona IBEX
+Description=IBEX
 After=network.target
 
 [Service]
