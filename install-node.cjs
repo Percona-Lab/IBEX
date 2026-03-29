@@ -350,17 +350,21 @@ async function preflight(targetDir) {
 async function cloneAndInstall(targetDir) {
   console.log(`${C.bold}Installing IBEX...${C.reset}\n`)
 
+  // Pin to stable version — override with IBEX_VERSION env var
+  const ibexVersion = process.env.IBEX_VERSION || "v1.0"
+
   if (fs.existsSync(path.join(targetDir, "package.json"))) {
     try {
       const pkg = JSON.parse(fs.readFileSync(path.join(targetDir, "package.json"), "utf-8"))
       if (pkg.name === "ibex") {
         ok(`Found existing IBEX at ${targetDir}`)
-        console.log(`    ${C.dim}This will pull the latest code updates (git pull).`)
+        console.log(`    ${C.dim}This will update to ${ibexVersion}.`)
         console.log(`    Your credentials and settings in ~/.ibex-mcp.env are not affected.${C.reset}`)
-        const update = await confirm("Pull latest updates?", true)
+        const update = await confirm("Update?", true)
         if (update) {
-          run("git pull", { cwd: targetDir })
-          ok("Updated to latest version")
+          run("git fetch --tags", { cwd: targetDir })
+          run(`git checkout ${ibexVersion}`, { cwd: targetDir })
+          ok(`Updated to ${ibexVersion}`)
         } else {
           ok("Keeping current version")
         }
@@ -368,7 +372,7 @@ async function cloneAndInstall(targetDir) {
     } catch {}
   } else {
     ok("Cloning IBEX repository...")
-    run(`git clone https://github.com/Percona-Lab/IBEX.git "${targetDir}"`)
+    run(`git clone --branch ${ibexVersion} https://github.com/Percona-Lab/IBEX.git "${targetDir}"`)
   }
 
   ok("Installing npm dependencies...")

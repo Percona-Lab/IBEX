@@ -111,8 +111,10 @@ install_node
 echo ""
 
 # Download and run the Node installer
+# Pinned to v1.0 tag for stability — future development happens on dev branch
 # Use </dev/tty so interactive prompts read from the terminal, not the pipe
+IBEX_VERSION="${IBEX_VERSION:-v1.0}"
 TMPFILE=$(mktemp /tmp/ibex-install.XXXXXX)
 trap 'rm -f "$TMPFILE"' EXIT INT TERM
-curl -fsSL https://raw.githubusercontent.com/Percona-Lab/IBEX/main/install-node.cjs > "$TMPFILE"
+curl -fsSL "https://raw.githubusercontent.com/Percona-Lab/IBEX/${IBEX_VERSION}/install-node.cjs" > "$TMPFILE"
 node "$TMPFILE" "$@" </dev/tty
