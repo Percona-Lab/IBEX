@@ -257,7 +257,9 @@ class Supervisor {
 
     // Also stop Caddy
     try {
-      if (has("caddy")) execSync("caddy stop", { stdio: "ignore" })
+      const cb = ["/opt/homebrew/bin/caddy", "/usr/local/bin/caddy", "/usr/bin/caddy"]
+        .find(p => fs.existsSync(p)) || "caddy"
+      execSync(`"${cb}" stop`, { stdio: "ignore" })
     } catch {}
 
     // Give children a moment to exit, then force-kill
@@ -419,11 +421,15 @@ ${C.bold}============================================================
     const keyFile = path.join(IBEX_DIR, "certs", "ibex-key.pem")
     const caddyFile = path.join(IBEX_DIR, "Caddyfile")
 
-    if (fs.existsSync(certFile) && has("caddy")) {
+    // Find caddy binary — launchd PATH doesn't include /opt/homebrew/bin
+    const caddyBin = ["/opt/homebrew/bin/caddy", "/usr/local/bin/caddy", "/usr/bin/caddy"]
+      .find(p => fs.existsSync(p)) || (has("caddy") ? "caddy" : null)
+
+    if (fs.existsSync(certFile) && caddyBin) {
       fs.writeFileSync(caddyFile, `https://ibex {\n    tls ${certFile} ${keyFile}\n    reverse_proxy localhost:${PORT}\n}\n`)
       try {
-        try { execSync("caddy stop", { stdio: "ignore" }) } catch {}
-        execSync(`caddy start --config "${caddyFile}"`, { stdio: "ignore" })
+        try { execSync(`"${caddyBin}" stop`, { stdio: "ignore" }) } catch {}
+        execSync(`"${caddyBin}" start --config "${caddyFile}"`, { stdio: "ignore" })
         ok("https://ibex → localhost:" + PORT)
         ibexUrl = "https://ibex"
       } catch {}
