@@ -300,10 +300,29 @@ async function promptCredentials(envPath) {
 
   for (const conn of CONNECTORS) {
     const hasExisting = conn.fields.some(f => existing[f.key])
-    const label = hasExisting ? `${conn.name} ${C.green}(configured)${C.reset}` : conn.name
-    const shouldConfigure = await confirm(`Configure ${label}?`, conn.id === "account")
 
-    if (!shouldConfigure) continue
+    // Show current values if configured
+    if (hasExisting) {
+      console.log(`  ${C.bold}${conn.name}${C.reset} ${C.green}(configured)${C.reset}`)
+      for (const field of conn.fields) {
+        const val = existing[field.key]
+        if (val) {
+          const display = field.secret ? `****${val.slice(-4)}` : val
+          console.log(`    ${C.dim}${field.key}=${display}${C.reset}`)
+        }
+      }
+      const shouldReconfigure = await confirm(`  Reconfigure ${conn.name}?`, false)
+      if (!shouldReconfigure) {
+        console.log("")
+        continue
+      }
+    } else {
+      const shouldConfigure = await confirm(`Configure ${conn.name}?`, conn.id === "account")
+      if (!shouldConfigure) {
+        console.log("")
+        continue
+      }
+    }
 
     if (conn.help) {
       console.log(`    ${C.dim}${conn.help}${C.reset}`)
