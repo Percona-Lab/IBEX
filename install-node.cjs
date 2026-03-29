@@ -594,7 +594,8 @@ async function startIBEX(targetDir, env) {
     const owuiEnv = {
       ...process.env,
       WEBUI_NAME: "Percona IBEX",
-      CHAT_RESPONSE_MAX_TOOL_CALL_RETRIES: "2"
+      CHAT_RESPONSE_MAX_TOOL_CALL_RETRIES: "2",
+      ENABLE_VERSION_UPDATE_CHECK: "false"
     }
     if (env.OPENAI_API_BASE_URL) {
       owuiEnv.OPENAI_API_BASE_URLS = env.OPENAI_API_BASE_URL
@@ -712,6 +713,8 @@ function setupAutoStart(targetDir) {
     <string>${targetDir}</string>
     <key>RunAtLoad</key>
     <true/>
+    <key>KeepAlive</key>
+    <true/>
     <key>StandardOutPath</key>
     <string>${logDir}/ibex.log</string>
     <key>StandardErrorPath</key>
@@ -748,7 +751,7 @@ After=network.target
 [Service]
 ExecStart=${nodePath} ${startScript} --no-browser
 WorkingDirectory=${targetDir}
-Restart=on-failure
+Restart=always
 RestartSec=5
 
 [Install]

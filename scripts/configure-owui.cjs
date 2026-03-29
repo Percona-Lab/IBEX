@@ -234,53 +234,49 @@ async function main() {
     }
   } catch {}
 
-  const isPercona = env.OPENAI_API_BASE_URL &&
-    env.OPENAI_API_BASE_URL.includes("percona.com")
+  // Hide all models except recommended ones and set default
+  try {
+    await api("POST", "/api/v1/configs/models", {
+      DEFAULT_MODELS: DEFAULT_MODEL,
+      DEFAULT_PINNED_MODELS: null,
+      MODEL_ORDER_LIST: [...RECOMMENDED_MODELS],
+      DEFAULT_MODEL_METADATA: {},
+      DEFAULT_MODEL_PARAMS: {}
+    }, token)
 
-  if (isPercona) {
-    try {
-      await api("POST", "/api/v1/configs/models", {
-        DEFAULT_MODELS: DEFAULT_MODEL,
-        DEFAULT_PINNED_MODELS: null,
-        MODEL_ORDER_LIST: [...RECOMMENDED_MODELS],
-        DEFAULT_MODEL_METADATA: {},
-        DEFAULT_MODEL_PARAMS: {}
-      }, token)
+    const modelsResp = await api("GET", "/api/models", null, token)
+    const modelsList = modelsResp.data || modelsResp || []
+    let hidden = 0
 
-      const modelsResp = await api("GET", "/api/models", null, token)
-      const modelsList = modelsResp.data || modelsResp || []
-      let hidden = 0
-
-      for (const m of modelsList) {
-        const mid = m.id || ""
-        if (RECOMMENDED_MODELS.has(mid)) {
-          const payload = {
-            id: mid,
-            name: m.name || mid,
-            meta: { hidden: false },
-            params: { function_calling: "native" }
-          }
-          await api("POST", "/api/v1/models/create", payload, token)
-          await api("POST", `/api/v1/models/model/update?id=${mid}`, payload, token)
-        } else {
-          const payload = {
-            id: mid,
-            name: m.name || mid,
-            meta: { hidden: true },
-            params: {}
-          }
-          await api("POST", "/api/v1/models/create", payload, token)
-          const result = await api("POST", `/api/v1/models/model/update?id=${mid}`, payload, token)
-          if (result) hidden++
+    for (const m of modelsList) {
+      const mid = m.id || ""
+      if (RECOMMENDED_MODELS.has(mid)) {
+        const payload = {
+          id: mid,
+          name: m.name || mid,
+          meta: { hidden: false },
+          params: { function_calling: "native" }
         }
+        await api("POST", "/api/v1/models/create", payload, token)
+        await api("POST", `/api/v1/models/model/update?id=${mid}`, payload, token)
+      } else {
+        const payload = {
+          id: mid,
+          name: m.name || mid,
+          meta: { hidden: true },
+          params: {}
+        }
+        await api("POST", "/api/v1/models/create", payload, token)
+        const result = await api("POST", `/api/v1/models/model/update?id=${mid}`, payload, token)
+        if (result) hidden++
       }
-
-      if (hidden > 0) {
-        log("\u2713", `Showing recommended models only (${hidden} hidden)`)
-      }
-    } catch (e) {
-      log("\u26a0", `Model config: ${e.message}`)
     }
+
+    if (hidden > 0) {
+      log("\u2713", `Showing recommended models only (${hidden} hidden)`)
+    }
+  } catch (e) {
+    log("\u26a0", `Model config: ${e.message}`)
   }
 
   log("\u2713", "Configuration complete")
