@@ -204,10 +204,15 @@ async function cloneAndInstall(targetDir) {
     try {
       const pkg = JSON.parse(fs.readFileSync(path.join(targetDir, "package.json"), "utf-8"))
       if (pkg.name === "ibex") {
-        const update = await confirm("IBEX already exists. Update it?", true)
+        ok(`Found existing IBEX at ${targetDir}`)
+        console.log(`    ${C.dim}This will pull the latest code updates (git pull).`)
+        console.log(`    Your credentials and settings in ~/.ibex-mcp.env are not affected.${C.reset}`)
+        const update = await confirm("Pull latest updates?", true)
         if (update) {
-          ok("Updating existing installation...")
           run("git pull", { cwd: targetDir })
+          ok("Updated to latest version")
+        } else {
+          ok("Keeping current version")
         }
       }
     } catch {}
