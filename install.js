@@ -21,13 +21,7 @@ module.exports = {
     {
       method: "shell.run",
       params: {
-        message: "node pinokio/create-env.js"
-      }
-    },
-    {
-      method: "shell.run",
-      params: {
-        message: "{{platform === 'win32' ? 'if not exist app mkdir app' : 'mkdir -p app'}}"
+        message: "node create-env.js"
       }
     },
     {

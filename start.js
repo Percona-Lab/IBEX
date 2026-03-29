@@ -2,6 +2,7 @@ module.exports = async (kernel) => {
   const fs = require("fs")
   const path = require("path")
   const os = require("os")
+  const PORT = await kernel.port()
   const envPath = path.join(os.homedir(), ".ibex-mcp.env")
   const env = {}
   if (fs.existsSync(envPath)) {
@@ -27,7 +28,6 @@ module.exports = async (kernel) => {
       method: "shell.run",
       params: {
         message: "node servers/slack.js --http",
-        path: "..",
         env: { SLACK_TOKEN: env.SLACK_TOKEN },
         on: [{ event: "/Streamable HTTP/i", done: true }]
       }
@@ -41,7 +41,6 @@ module.exports = async (kernel) => {
       method: "shell.run",
       params: {
         message: "node servers/notion.js --http",
-        path: "..",
         env: { NOTION_TOKEN: env.NOTION_TOKEN },
         on: [{ event: "/Streamable HTTP/i", done: true }]
       }
@@ -55,7 +54,6 @@ module.exports = async (kernel) => {
       method: "shell.run",
       params: {
         message: "node servers/jira.js --http",
-        path: "..",
         env: {
           JIRA_DOMAIN: env.JIRA_DOMAIN,
           JIRA_EMAIL: env.JIRA_EMAIL,
@@ -73,7 +71,6 @@ module.exports = async (kernel) => {
       method: "shell.run",
       params: {
         message: "node servers/memory.js --http",
-        path: "..",
         env: {
           GITHUB_TOKEN: env.GITHUB_TOKEN,
           GITHUB_OWNER: env.GITHUB_OWNER,
@@ -92,7 +89,6 @@ module.exports = async (kernel) => {
       method: "shell.run",
       params: {
         message: "node servers/servicenow.js --http",
-        path: "..",
         env: {
           SERVICENOW_INSTANCE: env.SERVICENOW_INSTANCE,
           SERVICENOW_USERNAME: env.SERVICENOW_USERNAME,
@@ -110,7 +106,6 @@ module.exports = async (kernel) => {
       method: "shell.run",
       params: {
         message: "node servers/salesforce.js --http",
-        path: "..",
         env: {
           SALESFORCE_INSTANCE_URL: env.SALESFORCE_INSTANCE_URL,
           SALESFORCE_ACCESS_TOKEN: env.SALESFORCE_ACCESS_TOKEN
@@ -120,7 +115,6 @@ module.exports = async (kernel) => {
     })
   }
 
-  const OWUI_PORT = 42004
   const owuiEnv = {
     WEBUI_NAME: "Percona IBEX",
     CHAT_RESPONSE_MAX_TOOL_CALL_RETRIES: "2"
@@ -161,10 +155,10 @@ module.exports = async (kernel) => {
     id: "open-webui",
     method: "shell.run",
     params: {
-      path: "../app",
+      path: "app",
       venv: "env",
       env: owuiEnv,
-      message: `open-webui serve --port ${OWUI_PORT} --host 127.0.0.1`,
+      message: `open-webui serve --port ${PORT} --host 127.0.0.1`,
       on: [{ event: "/Started server process/i", done: true }]
     }
   })
@@ -173,15 +167,14 @@ module.exports = async (kernel) => {
     id: "configure",
     method: "shell.run",
     params: {
-      message: `node scripts/configure-owui.js --port ${OWUI_PORT}`,
-      path: ".."
+      message: `node scripts/configure-owui.js --port ${PORT}`
     }
   })
 
   steps.push({
     method: "local.set",
     params: {
-      url: `http://127.0.0.1:${OWUI_PORT}`
+      url: `http://127.0.0.1:${PORT}`
     }
   })
 

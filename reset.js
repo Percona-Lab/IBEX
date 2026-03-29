@@ -1,9 +1,9 @@
 module.exports = {
   run: [
     {
-      method: "shell.run",
+      method: "fs.rm",
       params: {
-        message: "{{platform === 'win32' ? 'if exist app rmdir /s /q app' : 'rm -rf app'}}"
+        path: "app"
       }
     },
     {
