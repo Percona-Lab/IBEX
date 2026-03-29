@@ -749,120 +749,92 @@ async function setupPerconaDK() {
 async function startIBEX(targetDir, env) {
   console.log(`${C.bold}Starting IBEX...${C.reset}\n`)
 
-  const serverMap = [
-    { key: "SLACK_TOKEN", server: "slack", port: 3001 },
-    { key: "NOTION_TOKEN", server: "notion", port: 3002 },
-    { key: "JIRA_DOMAIN", server: "jira", port: 3003 },
-    // Memory is handled by PACK (port 3006) — https://github.com/Percona-Lab/PACK
-    { key: "SERVICENOW_INSTANCE", server: "servicenow", port: 3005 },
-    { key: "SALESFORCE_INSTANCE_URL", server: "salesforce", port: 3007 }
-  ]
-
-  for (const s of serverMap) {
-    if (env[s.key]) {
-      const child = spawn("node", [`servers/${s.server}.js`, "--http"], {
-        cwd: targetDir,
-        stdio: "ignore",
-        detached: true,
-        env: { ...process.env, ...env }
-      })
-      child.unref()
-      ok(`${s.server} MCP server \u2192 http://localhost:${s.port}/mcp`)
-    }
-  }
-
-  const owuiBin = isWin
-    ? path.join(targetDir, "app", "env", "Scripts", "open-webui")
-    : path.join(targetDir, "app", "env", "bin", "open-webui")
-
   const PORT = 8080
+  const nodeBin = process.execPath
+  const startScript = path.join(targetDir, "start-ibex.cjs")
 
-  if (fs.existsSync(owuiBin)) {
-    const owuiEnv = {
-      ...process.env,
-      WEBUI_NAME: "IBEX",
-      CHAT_RESPONSE_MAX_TOOL_CALL_RETRIES: "2",
-      ENABLE_VERSION_UPDATE_CHECK: "false"
+  // Launch the supervisor (start-ibex.cjs) as a background process
+  // It handles MCP servers, MCPO, OWUI, branding, and tool configuration
+  const supervisor = spawn(nodeBin, [startScript, "--no-browser"], {
+    cwd: targetDir,
+    stdio: "ignore",
+    detached: true,
+    env: { ...process.env, ...env }
+  })
+  supervisor.unref()
+  ok("IBEX supervisor started")
+
+  // Wait for OWUI to be ready
+  const waitStart = Date.now()
+  process.stdout.write("  Waiting for Open WebUI to be ready... (first launch takes ~60s) ")
+  const timer = setInterval(() => {
+    const elapsed = Math.round((Date.now() - waitStart) / 1000)
+    process.stdout.write(`\r  Waiting for Open WebUI to be ready... (${elapsed}s) `)
+  }, 1000)
+  const ready = await waitForServer(`http://127.0.0.1:${PORT}/api/config`, 120000)
+  clearInterval(timer)
+
+  if (ready) {
+    const elapsed = Math.round((Date.now() - waitStart) / 1000)
+    process.stdout.write(`\r  Waiting for Open WebUI to be ready... done (${elapsed}s)\n`)
+    ok(`Open WebUI → http://127.0.0.1:${PORT}`)
+
+    // Set up https://ibex local domain
+    let ibexUrl = `http://127.0.0.1:${PORT}`
+    ibexUrl = await setupLocalDomain(targetDir, PORT, ibexUrl)
+
+    // Wait for MCPO to be ready before opening browser
+    // (start-ibex.cjs starts MCPO with a 3s delay, configure runs after OWUI is ready)
+    const mcpoReady = await waitForServer("http://127.0.0.1:8010/openapi.json", 30000)
+    if (mcpoReady) {
+      ok("MCPO proxy ready")
+    } else {
+      warn("MCPO not ready yet — tools may need a moment")
     }
-    if (env.OPENAI_API_BASE_URL) {
-      owuiEnv.OPENAI_API_BASE_URLS = env.OPENAI_API_BASE_URL
-      owuiEnv.OPENAI_API_KEYS = env.OPENAI_API_KEY || "none"
-    }
-    if (env.OLLAMA_BASE_URL) {
-      owuiEnv.OLLAMA_BASE_URL = env.OLLAMA_BASE_URL
-    }
 
-    const owui = spawn(owuiBin, ["serve", "--port", String(PORT), "--host", "127.0.0.1"], {
-      cwd: targetDir,
-      stdio: "ignore",
-      detached: true,
-      env: owuiEnv
-    })
-    owui.unref()
-    ok("Starting Open WebUI...")
+    // Read token from configure output (start-ibex.cjs already ran configure)
+    let token = null
+    try {
+      const http = require("http")
+      const signin = await new Promise((resolve, reject) => {
+        const data = JSON.stringify({ email: env.OWUI_EMAIL, password: "changeme" })
+        const req = http.request({
+          hostname: "127.0.0.1", port: PORT, path: "/api/v1/auths/signin",
+          method: "POST", headers: { "Content-Type": "application/json", "Content-Length": data.length }
+        }, res => {
+          let body = ""
+          res.on("data", c => body += c)
+          res.on("end", () => { try { resolve(JSON.parse(body)) } catch { resolve({}) } })
+        })
+        req.on("error", reject)
+        req.write(data)
+        req.end()
+      })
+      token = signin.token
+    } catch {}
 
-    // Wait for server to be ready (first launch can take 1-2 minutes)
-    const waitStart = Date.now()
-    process.stdout.write("  Waiting for Open WebUI to be ready... (first launch takes ~60s) ")
-    const timer = setInterval(() => {
-      const elapsed = Math.round((Date.now() - waitStart) / 1000)
-      process.stdout.write(`\r  Waiting for Open WebUI to be ready... (${elapsed}s) `)
-    }, 1000)
-    const ready = await waitForServer(`http://127.0.0.1:${PORT}/api/config`, 120000)
-    clearInterval(timer)
-    if (ready) {
-      const elapsed = Math.round((Date.now() - waitStart) / 1000)
-      process.stdout.write(`\r  Waiting for Open WebUI to be ready... done (${elapsed}s)\n`)
-      ok(`Open WebUI \u2192 http://127.0.0.1:${PORT}`)
-
-      // Auto-configure: create account, set system prompt, configure models
-      let token = null
-      try {
-        const output = execSync(`node scripts/configure-owui.cjs --port ${PORT}`, {
-          cwd: targetDir, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"]
-        }).trim()
-        // Print the configure output (minus the token line)
-        for (const line of output.split("\n")) {
-          if (line.startsWith("__TOKEN__=")) {
-            token = line.replace("__TOKEN__=", "")
-          } else {
-            console.log(line)
-          }
-        }
-      } catch (err) {
-        warn("Auto-configuration skipped — configure manually")
-        if (err.stderr) warn(err.stderr.toString().trim())
-      }
-
-      // Set up https://ibex local domain
-      let ibexUrl = `http://127.0.0.1:${PORT}`
-      ibexUrl = await setupLocalDomain(targetDir, PORT, ibexUrl)
-
-      // Auto-authenticate via trampoline page
-      if (token) {
-        const staticDir = findOwuiStaticDir(targetDir)
-        if (staticDir) {
-          const authHtml = `<!DOCTYPE html><html><body><script>
+    // Auto-authenticate via trampoline page
+    if (token) {
+      const staticDir = findOwuiStaticDir(targetDir)
+      if (staticDir) {
+        const authHtml = `<!DOCTYPE html><html><body><script>
 localStorage.setItem('token', '${token}');
 window.location.href = '/';
 </script><p>Signing in...</p></body></html>`
-          fs.writeFileSync(path.join(staticDir, "auth.html"), authHtml)
-          ok("Opening browser (auto-authenticated)...")
-          openBrowser(`${ibexUrl}/static/auth.html`)
-        } else {
-          ok("Opening browser...")
-          openBrowser(ibexUrl)
-        }
+        fs.writeFileSync(path.join(staticDir, "auth.html"), authHtml)
+        ok("Opening browser (auto-authenticated)...")
+        openBrowser(`${ibexUrl}/static/auth.html`)
       } else {
         ok("Opening browser...")
         openBrowser(ibexUrl)
       }
     } else {
-      process.stdout.write(" timed out\n")
-      warn("Open WebUI is still starting — open http://127.0.0.1:" + PORT + " manually")
+      ok("Opening browser...")
+      openBrowser(ibexUrl)
     }
   } else {
-    warn("Open WebUI not installed — skipping launch")
+    process.stdout.write(" timed out\n")
+    warn("Open WebUI is still starting — open http://127.0.0.1:" + PORT + " manually")
   }
 
   console.log("")

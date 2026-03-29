@@ -447,20 +447,27 @@ ${C.bold}============================================================
       // Apply branding AFTER OWUI is ready (it overwrites static files on startup)
       applyBranding()
 
-      if (!noBrowser) {
-        // Auto-authenticate
-        let token = null
-        try {
-          const output = execSync(`"${nodeBin}" scripts/configure-owui.cjs --port ${PORT}`, {
-            cwd: IBEX_DIR, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"]
-          }).trim()
-          for (const line of output.split("\n")) {
-            if (line.startsWith("__TOKEN__=")) {
-              token = line.replace("__TOKEN__=", "")
-            }
-          }
-        } catch {}
+      // Wait for MCPO to be ready before configuring tool servers
+      if (hasMcpoServers) {
+        const mcpoReady = await waitForServer(`http://127.0.0.1:${MCPO_PORT}/openapi.json`, 30000)
+        if (mcpoReady) ok("MCPO proxy ready")
+        else warn("MCPO not ready — tool registration may fail")
+      }
 
+      // Configure OWUI: account, system prompt, tool servers, models
+      let token = null
+      try {
+        const output = execSync(`"${nodeBin}" scripts/configure-owui.cjs --port ${PORT}`, {
+          cwd: IBEX_DIR, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"]
+        }).trim()
+        for (const line of output.split("\n")) {
+          if (line.startsWith("__TOKEN__=")) {
+            token = line.replace("__TOKEN__=", "")
+          }
+        }
+      } catch {}
+
+      if (!noBrowser) {
         if (token) {
           const staticDir = findOwuiStaticDir()
           if (staticDir) {
