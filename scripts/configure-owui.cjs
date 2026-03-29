@@ -224,15 +224,37 @@ async function main() {
     log("\u2717", `Failed to set system prompt: ${e.message}`)
   }
 
+  // Register MCP servers as tool connections
+  const MCP_SERVERS = [
+    { key: "SLACK_TOKEN", name: "slack", port: 3001 },
+    { key: "NOTION_TOKEN", name: "notion", port: 3002 },
+    { key: "JIRA_DOMAIN", name: "jira", port: 3003 },
+    { key: "GITHUB_TOKEN", name: "memory", port: 3004 },
+    { key: "SERVICENOW_INSTANCE", name: "servicenow", port: 3005 },
+    { key: "SALESFORCE_INSTANCE_URL", name: "salesforce", port: 3006 }
+  ]
+
   try {
-    const tools = await api("GET", "/api/v1/tools/", null, token)
-    const count = Array.isArray(tools) ? tools.filter(t => t.id).length : 0
-    if (count > 0) {
-      log("\u2713", `Found ${count} tool(s)`)
-    } else {
-      log("\u26a0", "No tools discovered yet — MCP servers may still be loading")
+    const connections = MCP_SERVERS
+      .filter(s => env[s.key])
+      .map(s => ({
+        url: `http://localhost:${s.port}/mcp`,
+        path: s.name,
+        type: "mcp",
+        auth_type: "bearer",
+        key: "",
+        config: {}
+      }))
+
+    if (connections.length > 0) {
+      await api("POST", "/api/v1/configs/tool_servers", {
+        TOOL_SERVER_CONNECTIONS: connections
+      }, token)
+      log("\u2713", `Registered ${connections.length} MCP tool server(s): ${connections.map(c => c.path).join(", ")}`)
     }
-  } catch {}
+  } catch (e) {
+    log("\u26a0", `Tool server registration: ${e.message}`)
+  }
 
   // Hide all models except recommended ones and set default
   try {

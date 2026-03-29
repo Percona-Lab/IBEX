@@ -235,6 +235,92 @@ function checkDeps() {
   return { hasUV }
 }
 
+// ── Pre-flight: Docker, port conflicts, stale services ──────
+
+async function preflight(targetDir) {
+  let issues = false
+
+  // Check for Docker containers running Open WebUI or IBEX
+  if (has("docker")) {
+    try {
+      const containers = runQuiet("docker ps --format '{{.Names}} {{.Ports}}' 2>/dev/null")
+      if (containers) {
+        const owuiContainers = containers.split("\n").filter(line =>
+          /open.?webui|ibex|8080/i.test(line)
+        )
+        if (owuiContainers.length > 0) {
+          warn("Found Docker containers that may conflict:")
+          owuiContainers.forEach(c => console.log(`    ${C.dim}${c}${C.reset}`))
+          const stop = await confirm("Stop and remove these Docker containers?", true)
+          if (stop) {
+            for (const line of owuiContainers) {
+              const name = line.split(" ")[0]
+              try {
+                runQuiet(`docker stop ${name}`)
+                runQuiet(`docker rm ${name}`)
+                ok(`Removed container: ${name}`)
+              } catch {}
+            }
+          } else {
+            warn("Docker containers left running — port 8080 may conflict")
+            issues = true
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // Check if port 8080 is in use
+  try {
+    const portCheck = isWin
+      ? runQuiet("netstat -ano | findstr :8080 | findstr LISTENING")
+      : runQuiet("lsof -iTCP:8080 -sTCP:LISTEN -t 2>/dev/null")
+    if (portCheck) {
+      warn("Port 8080 is already in use")
+      if (!isWin) {
+        try {
+          const procInfo = runQuiet(`ps -p ${portCheck.split("\n")[0]} -o comm= 2>/dev/null`)
+          console.log(`    ${C.dim}Process: ${procInfo} (PID ${portCheck.split("\n")[0]})${C.reset}`)
+        } catch {}
+      }
+      const killIt = await confirm("Kill the process using port 8080?", true)
+      if (killIt) {
+        try {
+          if (isWin) {
+            run("for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :8080 ^| findstr LISTENING') do taskkill /PID %a /F", { shell: true, stdio: "ignore" })
+          } else {
+            run("lsof -iTCP:8080 -sTCP:LISTEN -t | xargs kill", { shell: true, stdio: "ignore" })
+          }
+          ok("Freed port 8080")
+        } catch {}
+      } else {
+        issues = true
+      }
+    }
+  } catch {
+    // Port is free — good
+  }
+
+  // Unload existing launchd/systemd service (will be re-created after install)
+  if (os.platform() === "darwin") {
+    const plistPath = path.join(home, "Library", "LaunchAgents", "com.percona.ibex.plist")
+    if (fs.existsSync(plistPath)) {
+      try { execSync(`launchctl bootout gui/$(id -u) "${plistPath}"`, { stdio: "ignore" }) } catch {}
+      try { execSync(`launchctl unload "${plistPath}"`, { stdio: "ignore" }) } catch {}
+    }
+  } else if (os.platform() === "linux") {
+    try { execSync("systemctl --user stop ibex.service", { stdio: "ignore" }) } catch {}
+  }
+
+  if (issues) {
+    const cont = await confirm("Continue with install anyway?", true)
+    if (!cont) {
+      console.log("\n  Install cancelled.\n")
+      process.exit(0)
+    }
+  }
+}
+
 // ── Phase 3: Clone & Install ─────────────────────────────────
 
 async function cloneAndInstall(targetDir) {
@@ -823,6 +909,8 @@ async function main() {
   showBanner()
 
   const { hasUV } = checkDeps()
+
+  await preflight(targetDir)
 
   await cloneAndInstall(targetDir)
 
