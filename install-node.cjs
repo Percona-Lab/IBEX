@@ -776,7 +776,7 @@ async function startIBEX(targetDir, env) {
 
   if (ready) {
     const elapsed = Math.round((Date.now() - waitStart) / 1000)
-    process.stdout.write(`\r  Waiting for Open WebUI to be ready... done (${elapsed}s)\n`)
+    process.stdout.write(`\r  Waiting for Open WebUI to be ready... done (${elapsed}s)                \n`)
     ok(`Open WebUI → http://127.0.0.1:${PORT}`)
 
     // Set up https://ibex local domain
