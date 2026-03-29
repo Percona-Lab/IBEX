@@ -354,6 +354,24 @@ async function promptCredentials(envPath) {
 
 // ── Phase 6: Open WebUI Setup ────────────────────────────────
 
+function findPython311() {
+  // Open WebUI requires Python >=3.11, <3.13
+  // Try to find a compatible version
+  const candidates = ["python3.11", "python3.12", "python3"]
+  for (const cmd of candidates) {
+    if (has(cmd)) {
+      try {
+        const ver = runQuiet(`${cmd} --version`).replace("Python ", "")
+        const [major, minor] = ver.split(".").map(Number)
+        if (major === 3 && minor >= 11 && minor < 13) {
+          return { cmd, ver }
+        }
+      } catch {}
+    }
+  }
+  return null
+}
+
 async function setupOpenWebUI(targetDir, pipCmd) {
   if (!pipCmd) {
     warn("Skipping Open WebUI \u2014 no Python/pip available")
@@ -361,6 +379,33 @@ async function setupOpenWebUI(targetDir, pipCmd) {
   }
 
   console.log(`${C.bold}Installing Open WebUI...${C.reset}\n`)
+
+  // Open WebUI needs Python 3.11 or 3.12 — not 3.13+
+  let py = findPython311()
+
+  if (!py && pipCmd === "uv pip") {
+    // uv can download Python 3.11 automatically
+    ok("Installing Python 3.11 via uv (Open WebUI requires 3.11-3.12)...")
+    py = { cmd: "python3.11", ver: "3.11" }
+  } else if (!py) {
+    // Need to install Python 3.11
+    warn("Open WebUI requires Python 3.11 or 3.12 (you have " + runQuiet("python3 --version") + ")")
+    if (!isWin && has("brew")) {
+      ok("Installing Python 3.11 via Homebrew...")
+      try {
+        run("brew install python@3.11")
+        py = findPython311()
+      } catch {
+        warn("Could not install Python 3.11 via Homebrew")
+      }
+    }
+    if (!py) {
+      warn("Skipping Open WebUI \u2014 install Python 3.11 manually: brew install python@3.11")
+      return
+    }
+  }
+
+  ok(`Using ${py.cmd} (${py.ver}) for Open WebUI`)
 
   const appDir = path.join(targetDir, "app")
   if (!fs.existsSync(appDir)) fs.mkdirSync(appDir, { recursive: true })
@@ -375,7 +420,7 @@ async function setupOpenWebUI(targetDir, pipCmd) {
         cwd: appDir, shell: true
       })
     } else {
-      run(`python3 -m venv "${path.join(appDir, "env")}"`, { cwd: appDir })
+      run(`${py.cmd} -m venv "${path.join(appDir, "env")}"`, { cwd: appDir })
       const pip = isWin
         ? path.join(appDir, "env", "Scripts", "pip")
         : path.join(appDir, "env", "bin", "pip")
