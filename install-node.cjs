@@ -506,6 +506,14 @@ async function setupOpenWebUI(targetDir) {
     warn(`Open WebUI install failed: ${err.message}`)
     warn("You can install it manually later: uv pip install open-webui")
   }
+
+  // Install MCPO (MCP-to-OpenAPI proxy) for reliable tool integration
+  try {
+    run("uv tool install mcpo", { shell: true })
+    ok("MCPO proxy installed")
+  } catch {
+    try { run("uv tool upgrade mcpo", { shell: true }); ok("MCPO proxy updated") } catch {}
+  }
   console.log("")
 }
 

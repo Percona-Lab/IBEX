@@ -240,13 +240,51 @@ ${C.bold}============================================================
 
   const mergedEnv = { ...process.env, ...env }
 
+  // Track which servers are active for MCPO config
+  const activeMcpServers = []
+
   for (const s of servers) {
     if (env[s.key]) {
       supervisor.start(`${s.server}-mcp`, "node", [`servers/${s.server}.js`, "--http"], {
         env: mergedEnv
       })
       ok(`${s.server} MCP server → http://localhost:${s.port}/mcp`)
+      activeMcpServers.push(s)
     }
+  }
+
+  // Also include PACK (memory) if GitHub credentials exist
+  if (env.GITHUB_TOKEN) {
+    activeMcpServers.push({ server: "memory", port: 3006 })
+  }
+
+  // ── Generate MCPO config and start proxy ────────────────────
+  const MCPO_PORT = 8010
+  const mcpoBin = path.join(home, ".local", "bin", "mcpo")
+
+  if (activeMcpServers.length > 0 && fs.existsSync(mcpoBin)) {
+    const mcpoConfig = { mcpServers: {} }
+    for (const s of activeMcpServers) {
+      mcpoConfig.mcpServers[s.server] = {
+        type: "streamable-http",
+        url: `http://127.0.0.1:${s.port}/mcp`
+      }
+    }
+    const mcpoConfigPath = path.join(IBEX_DIR, "mcpo-config.json")
+    fs.writeFileSync(mcpoConfigPath, JSON.stringify(mcpoConfig, null, 2) + "\n")
+
+    // Wait briefly for MCP servers to be ready before starting MCPO
+    setTimeout(() => {
+      supervisor.start("mcpo", mcpoBin, [
+        "--port", String(MCPO_PORT),
+        "--config", mcpoConfigPath,
+        "--host", "127.0.0.1"
+      ], { env: mergedEnv })
+      ok(`MCPO proxy → http://localhost:${MCPO_PORT} (${activeMcpServers.map(s => s.server).join(", ")})`)
+    }, 3000)
+  } else if (activeMcpServers.length > 0) {
+    warn("MCPO not installed — tools may not work in Open WebUI")
+    warn("Install with: uv tool install mcpo")
   }
 
   // ── Start Open WebUI ────────────────────────────────────────

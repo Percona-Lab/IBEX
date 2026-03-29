@@ -218,32 +218,31 @@ async function main() {
       settings.params.num_predict = 2048
     }
 
-    // Auto-enable MCP tools for every new chat
-    settings.tool_ids = ["server:mcp:None"]
-
     await api("POST", "/api/v1/users/user/settings/update", settings, token)
-    log("\u2713", "System prompt configured (tools auto-enabled)")
+    log("\u2713", "System prompt configured")
   } catch (e) {
     log("\u2717", `Failed to set system prompt: ${e.message}`)
   }
 
-  // Register MCP servers as tool connections
+  // Register MCPO (MCP-to-OpenAPI proxy) as tool server connections
+  // MCPO exposes each MCP server as an OpenAPI endpoint at /server-name/
+  const MCPO_PORT = 8010
   const MCP_SERVERS = [
-    { key: "SLACK_TOKEN", name: "slack", port: 3001 },
-    { key: "NOTION_TOKEN", name: "notion", port: 3002 },
-    { key: "JIRA_DOMAIN", name: "jira", port: 3003 },
-    { key: "GITHUB_TOKEN", name: "memory", port: 3006 },  // PACK — https://github.com/Percona-Lab/PACK
-    { key: "SERVICENOW_INSTANCE", name: "servicenow", port: 3005 },
-    { key: "SALESFORCE_INSTANCE_URL", name: "salesforce", port: 3007 }
+    { key: "SLACK_TOKEN", name: "slack" },
+    { key: "NOTION_TOKEN", name: "notion" },
+    { key: "JIRA_DOMAIN", name: "jira" },
+    { key: "GITHUB_TOKEN", name: "memory" },
+    { key: "SERVICENOW_INSTANCE", name: "servicenow" },
+    { key: "SALESFORCE_INSTANCE_URL", name: "salesforce" }
   ]
 
   try {
     const connections = MCP_SERVERS
       .filter(s => env[s.key])
       .map(s => ({
-        url: `http://localhost:${s.port}/mcp`,
-        path: s.name,
-        type: "mcp",
+        url: `http://127.0.0.1:${MCPO_PORT}/${s.name}`,
+        path: "/openapi.json",
+        type: "openapi",
         auth_type: "bearer",
         key: "",
         config: { enable: true }
@@ -253,7 +252,19 @@ async function main() {
       await api("POST", "/api/v1/configs/tool_servers", {
         TOOL_SERVER_CONNECTIONS: connections
       }, token)
-      log("\u2713", `Registered ${connections.length} MCP tool server(s): ${connections.map(c => c.path).join(", ")}`)
+      log("\u2713", `Registered ${connections.length} tool server(s) via MCPO: ${connections.map(c => c.url.split('/').pop()).join(", ")}`)
+
+      // Auto-enable tool servers for every new chat
+      // OWUI assigns sequential IDs: server:0, server:1, etc.
+      const toolIds = connections.map((_, i) => `server:${i}`)
+      try {
+        let settings = await api("GET", "/api/v1/users/user/settings", null, token) || {}
+        settings.tool_ids = toolIds
+        await api("POST", "/api/v1/users/user/settings/update", settings, token)
+        log("\u2713", `Tools auto-enabled: ${toolIds.join(", ")}`)
+      } catch (e) {
+        log("\u26a0", `Auto-enable tools: ${e.message}`)
+      }
     }
   } catch (e) {
     log("\u26a0", `Tool server registration: ${e.message}`)
