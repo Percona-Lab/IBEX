@@ -39,6 +39,8 @@ irm https://raw.githubusercontent.com/Percona-Lab/IBEX/main/install-ibex.ps1 | i
 
 ### After install
 
+IBEX **auto-starts on login** — no need to manually launch it after a reboot.
+
 1. Open **https://ibex** (or **http://ibex.localhost:8080** if you skipped the custom domain) — you're already logged in
 2. Click the **wrench icon** in the chat box and **enable all tools**
 3. Try these prompts:
@@ -71,17 +73,25 @@ Each server runs independently — start only the ones you need.
 
 ## Day-to-Day Usage
 
-After install, start IBEX with:
+IBEX auto-starts on login. If you need to start it manually:
 
 ```bash
-cd ~/IBEX && npm run start
+node ~/IBEX/start-ibex.cjs
+# or
+cd ~/IBEX && npm start
 ```
 
-Or run the installer again to reconfigure:
+To reconfigure connectors or update, run the installer again:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Percona-Lab/IBEX/main/install-ibex | bash
 ```
+
+**Auto-start details:**
+- **macOS**: launchd (`~/Library/LaunchAgents/com.percona.ibex.plist`)
+- **Linux**: systemd user service (`~/.config/systemd/user/ibex.service`)
+- **Windows**: Startup folder (`IBEX.vbs`)
+- **Logs**: `~/.ibex-logs/ibex.log` and `~/.ibex-logs/ibex.err`
 
 ## Custom Domain
 
