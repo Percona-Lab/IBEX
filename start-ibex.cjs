@@ -129,6 +129,29 @@ function applyBranding() {
     }
   }
   if (count > 0) ok(`Applied IBEX branding (${count} assets)`)
+
+  // Patch "Open WebUI" text in HTML/manifest files
+  const frontendDir = path.join(staticDir, "..", "frontend")
+  const textPatches = [
+    [path.join(frontendDir, "index.html"), /<title>Open WebUI<\/title>/, "<title>IBEX</title>"],
+    [path.join(frontendDir, "opensearch.xml"), /<ShortName>Open WebUI<\/ShortName>/, "<ShortName>IBEX</ShortName>"],
+    [path.join(frontendDir, "opensearch.xml"), /<Description>Search Open WebUI<\/Description>/, "<Description>Search IBEX</Description>"],
+    [path.join(staticDir, "site.webmanifest"), /"name":\s*"Open WebUI"/, '"name": "IBEX"'],
+    [path.join(staticDir, "site.webmanifest"), /"short_name":\s*"WebUI"/, '"short_name": "IBEX"'],
+    [path.join(frontendDir, "static", "site.webmanifest"), /"name":\s*"Open WebUI"/, '"name": "IBEX"'],
+    [path.join(frontendDir, "static", "site.webmanifest"), /"short_name":\s*"WebUI"/, '"short_name": "IBEX"'],
+  ]
+
+  for (const [filePath, pattern, replacement] of textPatches) {
+    try {
+      if (!fs.existsSync(filePath)) continue
+      const content = fs.readFileSync(filePath, "utf-8")
+      const patched = content.replace(pattern, replacement)
+      if (patched !== content) {
+        fs.writeFileSync(filePath, patched)
+      }
+    } catch {}
+  }
 }
 
 // ── Process Supervisor ──────────────────────────────────────
@@ -276,10 +299,11 @@ ${C.bold}============================================================
 
   // Track which servers are active for MCPO config
   const activeMcpServers = []
+  const nodeBin = process.execPath  // full path to node, safe for launchd
 
   for (const s of servers) {
     if (env[s.key]) {
-      supervisor.start(`${s.server}-mcp`, "node", [`servers/${s.server}.js`, "--http"], {
+      supervisor.start(`${s.server}-mcp`, nodeBin, [`servers/${s.server}.js`, "--http"], {
         env: mergedEnv
       })
       ok(`${s.server} MCP server → http://localhost:${s.port}/mcp`)
@@ -407,7 +431,7 @@ ${C.bold}============================================================
         // Auto-authenticate
         let token = null
         try {
-          const output = execSync(`node scripts/configure-owui.cjs --port ${PORT}`, {
+          const output = execSync(`"${nodeBin}" scripts/configure-owui.cjs --port ${PORT}`, {
             cwd: IBEX_DIR, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"]
           }).trim()
           for (const line of output.split("\n")) {
