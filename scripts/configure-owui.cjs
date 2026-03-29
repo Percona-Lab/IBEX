@@ -243,7 +243,7 @@ async function main() {
         type: "mcp",
         auth_type: "bearer",
         key: "",
-        config: {}
+        config: { enable: true }
       }))
 
     if (connections.length > 0) {
