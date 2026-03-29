@@ -174,18 +174,31 @@ function installPython() {
   }
 
   // Auto-install Python 3.11
-  ok("Installing Python 3.11 (required by Open WebUI)...")
+  warn("Installing Python 3.11 (required by Open WebUI)...")
   const platform = os.platform()
 
-  if (platform === "darwin" && has("brew")) {
+  if (platform === "darwin") {
     try {
-      run("brew install python@3.11")
-      // brew installs to a versioned path, add to PATH
-      const brewPrefix = runQuiet("brew --prefix python@3.11")
-      process.env.PATH = `${brewPrefix}/bin:${process.env.PATH}`
-      if (has("python3.11")) {
-        ok(`Python 3.11 installed (${runQuiet("python3.11 --version").replace("Python ", "")})`)
-        return "python3.11"
+      if (has("brew")) {
+        run("brew install python@3.11")
+        const brewPrefix = runQuiet("brew --prefix python@3.11")
+        process.env.PATH = `${brewPrefix}/bin:${process.env.PATH}`
+      } else {
+        // Use official python.org .pkg installer — no brew needed
+        ok("Downloading Python 3.12 from python.org...")
+        const pkgUrl = "https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg"
+        const tmpPkg = path.join(os.tmpdir(), `python-3.12-${Date.now()}.pkg`)
+        run(`curl -fsSL "${pkgUrl}" -o "${tmpPkg}"`)
+        run(`sudo installer -pkg "${tmpPkg}" -target /`)
+        try { fs.unlinkSync(tmpPkg) } catch {}
+        // The official installer puts python3.12 in /Library/Frameworks/Python.framework/Versions/3.12/bin
+        process.env.PATH = `/Library/Frameworks/Python.framework/Versions/3.12/bin:${process.env.PATH}`
+      }
+      for (const pyBin of ["python3.12", "python3.11"]) {
+        if (has(pyBin)) {
+          ok(`Python installed (${runQuiet(`${pyBin} --version`).replace("Python ", "")})`)
+          return pyBin
+        }
       }
     } catch {}
   } else if (platform === "linux") {
