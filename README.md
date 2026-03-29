@@ -66,8 +66,8 @@ All other models are hidden by default. Unhide them in Admin Panel → Settings 
 | **Notion** | 3002 | `search`, `get_page`, `get_block_children`, `query_database` | Search pages, read content, query databases |
 | **Jira** | 3003 | `search_issues`, `get_issue`, `list_projects` | JQL search, issue details, project listing |
 | **ServiceNow** | 3005 | `query_table`, `get_record`, `list_tables` | Query tables, get records |
-| **Salesforce** | 3006 | `soql_query`, `get_record`, `search`, `describe_object`, `list_objects` | SOQL queries, record details, global search |
-| **Memory** | 3004 | `memory_get`, `memory_update` | Read/write a persistent markdown file on GitHub |
+| **Salesforce** | 3007 | `soql_query`, `get_record`, `search`, `describe_object`, `list_objects` | SOQL queries, record details, global search |
+| **Memory** ([PACK](https://github.com/Percona-Lab/PACK)) | 3006 | `memory_get`, `memory_update`, `memory_list`, `memory_search` | Read/write persistent memory on GitHub |
 
 Each server runs independently — start only the ones you need.
 
@@ -115,7 +115,7 @@ curl | bash
 ### Architecture
 
 ```
-Browser → https://ibex (Caddy) → Open WebUI (:8080) → MCP servers (:3001-3006) → APIs
+Browser → https://ibex (Caddy) → Open WebUI (:8080) → MCP servers (:3001-3007) → APIs
                                        ↓
                                   Percona LLM servers (Ollama)
 ```
@@ -177,9 +177,9 @@ cd ~/IBEX
 node servers/slack.js --http            # port 3001
 node servers/notion.js --http           # port 3002
 node servers/jira.js --http             # port 3003
-node servers/memory.js --http           # port 3004
+# Memory is provided by PACK (port 3006) — see https://github.com/Percona-Lab/PACK
 node servers/servicenow.js --http       # port 3005
-node servers/salesforce.js --http       # port 3006
+node servers/salesforce.js --http       # port 3007
 ```
 
 Override the port: `MCP_SSE_PORT=4000 node servers/slack.js --http`
@@ -213,9 +213,9 @@ All servers support three transport modes:
 │   ├── slack.js               # Slack MCP server (port 3001)
 │   ├── notion.js              # Notion MCP server (port 3002)
 │   ├── jira.js                # Jira MCP server (port 3003)
-│   ├── memory.js              # Memory MCP server (port 3004)
+│   ├── memory.js              # Memory MCP server (legacy — now provided by PACK on port 3006)
 │   ├── servicenow.js          # ServiceNow MCP server (port 3005)
-│   └── salesforce.js          # Salesforce MCP server (port 3006)
+│   └── salesforce.js          # Salesforce MCP server (port 3007)
 ├── connectors/
 │   ├── slack.js               # Slack Web API connector
 │   ├── notion.js              # Notion API connector

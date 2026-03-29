@@ -392,7 +392,7 @@ async function startIBEX(targetDir, env) {
     { key: "JIRA_DOMAIN", server: "jira", port: 3003 },
     { key: "GITHUB_TOKEN", server: "memory", port: 3004 },
     { key: "SERVICENOW_INSTANCE", server: "servicenow", port: 3005 },
-    { key: "SALESFORCE_INSTANCE_URL", server: "salesforce", port: 3006 }
+    { key: "SALESFORCE_INSTANCE_URL", server: "salesforce", port: 3007 }
   ]
 
   const running = []

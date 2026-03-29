@@ -101,7 +101,7 @@ export default async (kernel) => {
   }
 
   if (env.SALESFORCE_INSTANCE_URL && env.SALESFORCE_ACCESS_TOKEN) {
-    servers.push({ name: "Salesforce", port: 3006 })
+    servers.push({ name: "Salesforce", port: 3007 })
     steps.push({
       id: "mcp-salesforce",
       method: "shell.run",

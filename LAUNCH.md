@@ -10,7 +10,7 @@ node servers/notion.js --sse-only           # port 3002
 node servers/jira.js --sse-only             # port 3003
 node servers/memory.js --sse-only           # port 3004
 node servers/servicenow.js --sse-only      # port 3005
-node servers/salesforce.js --sse-only      # port 3006
+node servers/salesforce.js --sse-only      # port 3007
 ```
 
 ## All-in-one (all tools on one port)
@@ -44,7 +44,7 @@ Access at: http://localhost:8080
 | Jira | `http://host.docker.internal:3003/sse` |
 | Memory | `http://host.docker.internal:3004/sse` |
 | ServiceNow | `http://host.docker.internal:3005/sse` |
-| Salesforce | `http://host.docker.internal:3006/sse` |
+| Salesforce | `http://host.docker.internal:3007/sse` |
 
 Type: SSE / Auth: None
 

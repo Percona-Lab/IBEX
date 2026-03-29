@@ -229,9 +229,9 @@ async function main() {
     { key: "SLACK_TOKEN", name: "slack", port: 3001 },
     { key: "NOTION_TOKEN", name: "notion", port: 3002 },
     { key: "JIRA_DOMAIN", name: "jira", port: 3003 },
-    { key: "GITHUB_TOKEN", name: "memory", port: 3004 },
+    { key: "GITHUB_TOKEN", name: "memory", port: 3006 },  // PACK — https://github.com/Percona-Lab/PACK
     { key: "SERVICENOW_INSTANCE", name: "servicenow", port: 3005 },
-    { key: "SALESFORCE_INSTANCE_URL", name: "salesforce", port: 3006 }
+    { key: "SALESFORCE_INSTANCE_URL", name: "salesforce", port: 3007 }
   ]
 
   try {

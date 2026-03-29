@@ -233,9 +233,9 @@ ${C.bold}============================================================
     { key: "SLACK_TOKEN", server: "slack", port: 3001 },
     { key: "NOTION_TOKEN", server: "notion", port: 3002 },
     { key: "JIRA_DOMAIN", server: "jira", port: 3003 },
-    { key: "GITHUB_TOKEN", server: "memory", port: 3004 },
+    // Memory is handled by PACK (port 3006) — https://github.com/Percona-Lab/PACK
     { key: "SERVICENOW_INSTANCE", server: "servicenow", port: 3005 },
-    { key: "SALESFORCE_INSTANCE_URL", server: "salesforce", port: 3006 }
+    { key: "SALESFORCE_INSTANCE_URL", server: "salesforce", port: 3007 }
   ]
 
   const mergedEnv = { ...process.env, ...env }

@@ -12,7 +12,7 @@ const sf = new SalesforceConnector(
 
 await createMCPServer({
   name: 'ibex-salesforce',
-  defaultPort: 3006,
+  defaultPort: 3007,
   tools: [
     {
       name: 'soql_query',
