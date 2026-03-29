@@ -152,6 +152,22 @@ function applyBranding() {
       }
     } catch {}
   }
+
+  // Remove OWUI's forced " (Open WebUI)" suffix on custom WEBUI_NAME
+  // env.py: if WEBUI_NAME != 'Open WebUI': WEBUI_NAME += ' (Open WebUI)'
+  const envPy = path.join(staticDir, "..", "env.py")
+  try {
+    if (fs.existsSync(envPy)) {
+      const content = fs.readFileSync(envPy, "utf-8")
+      const patched = content.replace(
+        /if WEBUI_NAME != 'Open WebUI':\n\s+WEBUI_NAME \+= ' \(Open WebUI\)'/,
+        "# IBEX: removed forced (Open WebUI) suffix\n# if WEBUI_NAME != 'Open WebUI':\n#     WEBUI_NAME += ' (Open WebUI)'"
+      )
+      if (patched !== content) {
+        fs.writeFileSync(envPy, patched)
+      }
+    }
+  } catch {}
 }
 
 // ── Process Supervisor ──────────────────────────────────────
