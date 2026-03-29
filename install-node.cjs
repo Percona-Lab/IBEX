@@ -630,7 +630,7 @@ async function startIBEX(targetDir, env) {
       // Auto-configure: create account, set system prompt, configure models
       let token = null
       try {
-        const output = execSync(`node scripts/configure-owui.js --port ${PORT}`, {
+        const output = execSync(`node scripts/configure-owui.cjs --port ${PORT}`, {
           cwd: targetDir, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"]
         }).trim()
         // Print the configure output (minus the token line)

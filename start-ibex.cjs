@@ -203,7 +203,7 @@ ${C.bold}============================================================
         // Auto-authenticate
         let token = null
         try {
-          const output = execSync(`node scripts/configure-owui.js --port ${PORT}`, {
+          const output = execSync(`node scripts/configure-owui.cjs --port ${PORT}`, {
             cwd: IBEX_DIR, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"]
           }).trim()
           for (const line of output.split("\n")) {

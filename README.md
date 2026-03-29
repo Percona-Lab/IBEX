@@ -109,7 +109,7 @@ During install, you can set up **https://ibex** as a local shortcut:
 curl | bash
   → install-ibex (bash)      Installs Node.js + Git
   → install-node.cjs (node)  Installs uv, clones repo, credentials, Open WebUI, starts everything
-  → configure-owui.js        Creates account, sets system prompt, configures models
+  → configure-owui.cjs        Creates account, sets system prompt, configures models
 ```
 
 ### Architecture
@@ -203,7 +203,7 @@ All servers support three transport modes:
 ├── install-ibex.ps1           # PowerShell bootstrap for Windows
 ├── install-node.cjs           # Main installer (Node.js, cross-platform)
 ├── scripts/
-│   ├── configure-owui.js      # Auto-configures Open WebUI (account, prompt, models)
+│   ├── configure-owui.cjs      # Auto-configures Open WebUI (account, prompt, models)
 │   ├── build-prompt.sh        # System prompt generator
 │   ├── launchd-service.sh     # Background service manager (macOS)
 │   └── google-auth.js         # One-time Google OAuth2 setup
