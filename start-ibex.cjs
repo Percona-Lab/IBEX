@@ -458,14 +458,20 @@ ${C.bold}============================================================
       let token = null
       try {
         const output = execSync(`"${nodeBin}" scripts/configure-owui.cjs --port ${PORT}`, {
-          cwd: IBEX_DIR, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"]
+          cwd: IBEX_DIR, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
+          timeout: 30000
         }).trim()
         for (const line of output.split("\n")) {
           if (line.startsWith("__TOKEN__=")) {
             token = line.replace("__TOKEN__=", "")
+          } else if (line.trim()) {
+            console.log(line)
           }
         }
-      } catch {}
+      } catch (e) {
+        warn(`Configure failed: ${e.message}`)
+        if (e.stderr) warn(e.stderr.toString().trim().slice(0, 200))
+      }
 
       if (!noBrowser) {
         if (token) {
