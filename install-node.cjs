@@ -146,82 +146,33 @@ ${C.bold}============================================================
 
 // ── Phase 2: Check Dependencies ──────────────────────────────
 
-function installPython() {
-  // Open WebUI needs Python 3.11 or 3.12
-  // Try to find a compatible version, install if missing
-  const candidates = ["python3.11", "python3.12"]
-  for (const cmd of candidates) {
-    if (has(cmd)) {
-      try {
-        const ver = runQuiet(`${cmd} --version`).replace("Python ", "")
-        ok(`${cmd} (${ver})`)
-        return cmd
-      } catch {}
+function installUV() {
+  if (has("uv")) {
+    ok(`uv (${runQuiet("uv --version")})`)
+    return true
+  }
+
+  warn("Installing uv (Python package manager)...")
+  try {
+    if (isWin) {
+      run("powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"", { shell: true })
+      // Refresh PATH
+      const newPath = execSync("cmd /c echo %PATH%", { encoding: "utf-8" }).trim()
+      process.env.PATH = newPath
+    } else {
+      run("curl -LsSf https://astral.sh/uv/install.sh | sh", { shell: true })
+      // uv installs to ~/.local/bin (or ~/.cargo/bin)
+      process.env.PATH = `${home}/.local/bin:${home}/.cargo/bin:${process.env.PATH}`
     }
-  }
 
-  // Check if default python3 is compatible
-  if (has("python3")) {
-    try {
-      const ver = runQuiet("python3 --version").replace("Python ", "")
-      const [, minor] = ver.split(".").map(Number)
-      if (minor >= 11 && minor < 13) {
-        ok(`Python3 (${ver})`)
-        return "python3"
-      }
-      warn(`Python ${ver} found but Open WebUI needs 3.11 or 3.12`)
-    } catch {}
-  }
+    if (has("uv")) {
+      ok(`uv installed (${runQuiet("uv --version")})`)
+      return true
+    }
+  } catch {}
 
-  // Auto-install Python 3.11
-  warn("Installing Python 3.11 (required by Open WebUI)...")
-  const platform = os.platform()
-
-  if (platform === "darwin") {
-    try {
-      if (!has("brew")) {
-        ok("Installing Homebrew first...")
-        run('/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"', { shell: true })
-        // Add brew to PATH for this session
-        if (fs.existsSync("/opt/homebrew/bin/brew")) {
-          const brewEnv = runQuiet("/opt/homebrew/bin/brew shellenv")
-          for (const line of brewEnv.split("\n")) {
-            const m = line.match(/export PATH="([^"]+)"/)
-            if (m) process.env.PATH = m[1]
-          }
-        }
-      }
-      run("brew install python@3.11")
-      const brewPrefix = runQuiet("brew --prefix python@3.11")
-      process.env.PATH = `${brewPrefix}/bin:${process.env.PATH}`
-      if (has("python3.11")) {
-        ok(`Python 3.11 installed (${runQuiet("python3.11 --version").replace("Python ", "")})`)
-        return "python3.11"
-      }
-    } catch {}
-  } else if (platform === "linux") {
-    try {
-      if (has("apt-get")) {
-        run("sudo apt-get update -qq && sudo apt-get install -y python3.11 python3.11-venv python3-pip", { shell: true })
-      } else if (has("dnf")) {
-        run("sudo dnf install -y python3.11", { shell: true })
-      }
-      if (has("python3.11")) return "python3.11"
-    } catch {}
-  } else if (isWin) {
-    try {
-      if (has("winget")) {
-        run("winget install Python.Python.3.11 --accept-package-agreements --accept-source-agreements")
-        // Refresh PATH
-        const newPath = execSync("cmd /c echo %PATH%", { encoding: "utf-8" }).trim()
-        process.env.PATH = newPath
-        if (has("python3.11") || has("python")) return has("python3.11") ? "python3.11" : "python"
-      }
-    } catch {}
-  }
-
-  warn("Could not install Python 3.11 automatically")
-  return null
+  fail("Could not install uv — install manually from https://docs.astral.sh/uv/")
+  return false
 }
 
 function checkDeps() {
@@ -231,7 +182,7 @@ function checkDeps() {
   if (has("git")) {
     ok(`Git (${runQuiet("git --version").replace("git version ", "")})`)
   } else {
-    fail("Git is required \u2014 install from https://git-scm.com")
+    fail("Git is required — install from https://git-scm.com")
     process.exit(1)
   }
 
@@ -240,42 +191,15 @@ function checkDeps() {
   if (nodeVer >= 18) {
     ok(`Node.js (${process.version})`)
   } else {
-    fail(`Node.js ${process.version} is too old \u2014 need >= 18`)
+    fail(`Node.js ${process.version} is too old — need >= 18`)
     process.exit(1)
   }
 
-  // Python 3.11-3.12 (install if needed)
-  let pipCmd = null
-  let pyCmd = null
-  if (has("uv")) {
-    pipCmd = "uv pip"
-    pyCmd = "python3.11"
-    ok(`uv (${runQuiet("uv --version")})`)
-  } else {
-    pyCmd = installPython()
-    if (pyCmd) {
-      try {
-        runQuiet(`${pyCmd} -m pip --version`)
-        pipCmd = `${pyCmd} -m pip`
-      } catch {
-        // Try ensurepip
-        try {
-          run(`${pyCmd} -m ensurepip --upgrade`, { stdio: "ignore" })
-          pipCmd = `${pyCmd} -m pip`
-        } catch {
-          warn("pip not available \u2014 will try to install Open WebUI anyway")
-          pipCmd = `${pyCmd} -m pip`
-        }
-      }
-    }
-  }
-
-  if (!pipCmd) {
-    warn("Python 3.11-3.12 not found \u2014 Open WebUI install will be skipped")
-  }
+  // uv (installs if needed — handles Python automatically)
+  const hasUV = installUV()
 
   console.log("")
-  return { pipCmd, pyCmd }
+  return { hasUV }
 }
 
 // ── Phase 3: Clone & Install ─────────────────────────────────
@@ -437,37 +361,31 @@ async function promptCredentials(envPath) {
 
 // ── Phase 6: Open WebUI Setup ────────────────────────────────
 
-async function setupOpenWebUI(targetDir, pipCmd, pyCmd) {
-  if (!pipCmd || !pyCmd) {
-    warn("Skipping Open WebUI \u2014 no compatible Python available")
+async function setupOpenWebUI(targetDir) {
+  if (!has("uv")) {
+    warn("Skipping Open WebUI — uv not available")
     return
   }
 
   console.log(`${C.bold}Installing Open WebUI...${C.reset}\n`)
 
   const appDir = path.join(targetDir, "app")
+  const envDir = path.join(appDir, "env")
   if (!fs.existsSync(appDir)) fs.mkdirSync(appDir, { recursive: true })
 
   try {
-    if (pipCmd === "uv pip") {
-      run(`uv venv "${path.join(appDir, "env")}" --python 3.11`, { cwd: appDir })
-      const activate = isWin
-        ? `"${path.join(appDir, "env", "Scripts", "activate")}"`
-        : `source "${path.join(appDir, "env", "bin", "activate")}"`
-      run(`${activate} && uv pip install open-webui onnxruntime==1.20.1 itsdangerous`, {
-        cwd: appDir, shell: true
-      })
-    } else {
-      run(`${pyCmd} -m venv "${path.join(appDir, "env")}"`, { cwd: appDir })
-      const pip = isWin
-        ? path.join(appDir, "env", "Scripts", "pip")
-        : path.join(appDir, "env", "bin", "pip")
-      run(`"${pip}" install open-webui onnxruntime==1.20.1 itsdangerous`, { shell: true })
-    }
+    // uv downloads the right Python automatically — no system Python needed
+    run(`uv venv "${envDir}" --python 3.12`, { cwd: appDir })
+    const activate = isWin
+      ? `"${path.join(envDir, "Scripts", "activate")}"`
+      : `source "${path.join(envDir, "bin", "activate")}"`
+    run(`${activate} && uv pip install open-webui onnxruntime==1.20.1 itsdangerous`, {
+      cwd: appDir, shell: true
+    })
     ok("Open WebUI installed")
   } catch (err) {
     warn(`Open WebUI install failed: ${err.message}`)
-    warn("You can install it manually later: pip install open-webui")
+    warn("You can install it manually later: uv pip install open-webui")
   }
   console.log("")
 }
@@ -628,7 +546,7 @@ async function main() {
 
   showBanner()
 
-  const { pipCmd, pyCmd } = checkDeps()
+  const { hasUV } = checkDeps()
 
   await cloneAndInstall(targetDir)
 
@@ -647,7 +565,7 @@ async function main() {
   }
 
   if (!flags.has("--skip-owui")) {
-    await setupOpenWebUI(targetDir, pipCmd, pyCmd)
+    await setupOpenWebUI(targetDir)
   }
 
   // Always start + open browser unless --no-start
