@@ -280,7 +280,7 @@ async function main() {
           params: { function_calling: "native" }
         }
         await api("POST", "/api/v1/models/create", payload, token)
-        await api("POST", `/api/v1/models/model/update?id=${mid}`, payload, token)
+        await api("POST", `/api/v1/models/model/update?id=${encodeURIComponent(mid)}`, payload, token)
       } else {
         const payload = {
           id: mid,
@@ -289,7 +289,7 @@ async function main() {
           params: {}
         }
         await api("POST", "/api/v1/models/create", payload, token)
-        const result = await api("POST", `/api/v1/models/model/update?id=${mid}`, payload, token)
+        const result = await api("POST", `/api/v1/models/model/update?id=${encodeURIComponent(mid)}`, payload, token)
         if (result) hidden++
       }
     }
