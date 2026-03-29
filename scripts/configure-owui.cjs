@@ -270,6 +270,15 @@ async function main() {
     log("\u26a0", `Tool server registration: ${e.message}`)
   }
 
+  // Collect tool server IDs for auto-enable on models
+  let toolServerIds = []
+  try {
+    const toolsList = await api("GET", "/api/v1/tools/", null, token) || []
+    if (Array.isArray(toolsList)) {
+      toolServerIds = toolsList.map(t => t.id)
+    }
+  } catch {}
+
   // Hide all models except recommended ones and set default
   try {
     await api("POST", "/api/v1/configs/models", {
@@ -290,7 +299,7 @@ async function main() {
         const payload = {
           id: mid,
           name: m.name || mid,
-          meta: { hidden: false },
+          meta: { hidden: false, toolIds: toolServerIds },
           params: { function_calling: "native" }
         }
         await api("POST", "/api/v1/models/create", payload, token)

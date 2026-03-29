@@ -97,6 +97,38 @@ function findOwuiStaticDir() {
   return null
 }
 
+// ── Apply branding ──────────────────────────────────────────
+
+function applyBranding() {
+  const staticDir = findOwuiStaticDir()
+  if (!staticDir) return
+  const brandDir = path.join(IBEX_DIR, "branding")
+  if (!fs.existsSync(brandDir)) return
+
+  const copies = [
+    ["favicon.png", "favicon.png"],
+    ["favicon.png", "favicon-dark.png"],
+    ["favicon.png", "apple-touch-icon.png"],
+    ["favicon-96x96.png", "favicon-96x96.png"],
+    ["logo.png", "logo.png"],
+    ["splash.png", "splash.png"],
+    ["splash-dark.png", "splash-dark.png"],
+    ["user.png", "user.png"],
+    ["web-app-manifest-192x192.png", "web-app-manifest-192x192.png"],
+    ["web-app-manifest-512x512.png", "web-app-manifest-512x512.png"],
+  ]
+
+  let count = 0
+  for (const [src, dst] of copies) {
+    const srcPath = path.join(brandDir, src)
+    const dstPath = path.join(staticDir, dst)
+    if (fs.existsSync(srcPath)) {
+      try { fs.copyFileSync(srcPath, dstPath); count++ } catch {}
+    }
+  }
+  if (count > 0) ok(`Applied IBEX branding (${count} assets)`)
+}
+
 // ── Process Supervisor ──────────────────────────────────────
 
 class Supervisor {
@@ -286,6 +318,9 @@ ${C.bold}============================================================
     warn("MCPO not installed — tools may not work in Open WebUI")
     warn("Install with: uv tool install mcpo")
   }
+
+  // ── Apply branding before OWUI starts ───────────────────────
+  applyBranding()
 
   // ── Start Open WebUI ────────────────────────────────────────
   const PORT = 8080
