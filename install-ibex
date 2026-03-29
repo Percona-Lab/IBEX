@@ -1,0 +1,116 @@
+#!/bin/bash
+# IBEX Zero-Prereq Installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/Percona-Lab/IBEX/main/install-ibex | bash
+#
+# Installs Node.js if missing, then runs the Node-based installer.
+
+set -e
+
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+ok()   { printf "  ${GREEN}✓${NC} %s\n" "$1"; }
+warn() { printf "  ${YELLOW}!${NC} %s\n" "$1"; }
+fail() { printf "  ${RED}✗${NC} %s\n" "$1"; exit 1; }
+
+echo ""
+echo -e "${BOLD}============================================================"
+echo " 🦌 IBEX Bootstrap"
+echo -e "============================================================${NC}"
+echo ""
+
+# ── Install Node.js if missing ────────────────────────────────
+
+install_node() {
+  if command -v node &>/dev/null; then
+    local ver
+    ver=$(node --version | sed 's/v//' | cut -d. -f1)
+    if [ "$ver" -ge 18 ]; then
+      ok "Node.js ($(node --version))"
+      return
+    fi
+    warn "Node.js $(node --version) is too old — upgrading..."
+  else
+    warn "Node.js not found — installing..."
+  fi
+
+  case "$(uname -s)" in
+    Darwin)
+      if command -v brew &>/dev/null; then
+        brew install node
+      else
+        warn "Installing Homebrew first..."
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        if [ -f /opt/homebrew/bin/brew ]; then
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+        fi
+        brew install node
+      fi
+      ;;
+    Linux)
+      if command -v apt-get &>/dev/null; then
+        curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+        sudo apt-get install -y nodejs
+      elif command -v dnf &>/dev/null; then
+        sudo dnf install -y nodejs
+      elif command -v yum &>/dev/null; then
+        curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
+        sudo yum install -y nodejs
+      else
+        fail "Could not detect package manager — install Node.js 18+ manually from https://nodejs.org"
+      fi
+      ;;
+    *)
+      fail "Unsupported OS — install Node.js 18+ manually from https://nodejs.org"
+      ;;
+  esac
+
+  if command -v node &>/dev/null; then
+    ok "Node.js installed ($(node --version))"
+  else
+    fail "Node.js installation failed — install manually from https://nodejs.org"
+  fi
+}
+
+# ── Install Git if missing ────────────────────────────────────
+
+install_git() {
+  if command -v git &>/dev/null; then
+    ok "Git ($(git --version | awk '{print $3}'))"
+    return
+  fi
+
+  warn "Git not found — installing..."
+  case "$(uname -s)" in
+    Darwin) xcode-select --install 2>/dev/null || brew install git ;;
+    Linux)
+      if command -v apt-get &>/dev/null; then
+        sudo apt-get install -y git
+      elif command -v dnf &>/dev/null; then
+        sudo dnf install -y git
+      fi
+      ;;
+  esac
+
+  if command -v git &>/dev/null; then
+    ok "Git installed"
+  else
+    fail "Git installation failed — install manually from https://git-scm.com"
+  fi
+}
+
+# ── Main ──────────────────────────────────────────────────────
+
+install_git
+install_node
+
+echo ""
+
+# Download and run the Node installer
+TMPFILE=$(mktemp /tmp/ibex-install.XXXXXX.js)
+curl -fsSL https://raw.githubusercontent.com/Percona-Lab/IBEX/main/install-node.cjs > "$TMPFILE"
+node "$TMPFILE" "$@"
+rm -f "$TMPFILE"
