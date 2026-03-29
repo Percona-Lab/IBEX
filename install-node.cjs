@@ -498,7 +498,7 @@ async function setupOpenWebUI(targetDir) {
     const activate = isWin
       ? `"${path.join(envDir, "Scripts", "activate")}"`
       : `source "${path.join(envDir, "bin", "activate")}"`
-    run(`${activate} && uv pip install "open-webui>=0.8.0" onnxruntime==1.20.1 itsdangerous`, {
+    run(`${activate} && uv pip install "open-webui>=0.8.0" itsdangerous`, {
       cwd: appDir, shell: true
     })
     ok("Open WebUI installed")
@@ -509,11 +509,9 @@ async function setupOpenWebUI(targetDir) {
 
   // Install MCPO (MCP-to-OpenAPI proxy) for reliable tool integration
   try {
-    run("uv tool install mcpo", { shell: true })
+    run("uv tool install mcpo --force", { shell: true })
     ok("MCPO proxy installed")
-  } catch {
-    try { run("uv tool upgrade mcpo", { shell: true }); ok("MCPO proxy updated") } catch {}
-  }
+  } catch {}
   console.log("")
 }
 
