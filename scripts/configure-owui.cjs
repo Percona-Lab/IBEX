@@ -70,8 +70,17 @@ async function buildSystemPrompt(env) {
   let prompt = "You are a helpful work assistant with access to workplace tools via IBEX."
   prompt += " Do not use <think> blocks or internal reasoning. Respond directly and concisely."
   prompt += " When a tool is available for the user's request, call it immediately without explaining your reasoning."
-  prompt += " IMPORTANT: Call each tool at most ONCE per user message. After receiving a tool result, summarize it for the user immediately. Do NOT call the same tool again with different parameters unless the user explicitly asks for a follow-up search."
+  prompt += " IMPORTANT: Call each tool at most ONCE per user message. After receiving a tool result, present it for the user immediately. Do NOT call another tool unless absolutely necessary."
   prompt += " If a tool returns empty results, tell the user — do not retry with different queries."
+  prompt += "\n\n## Tool routing — pick the RIGHT tool:"
+  prompt += "\n- Writing style, preferences, tone, personal context → memory_search / memory_get"
+  prompt += "\n- How to install/use IBEX, architecture, setup → memory_search (NOT Slack)"
+  prompt += "\n- Slack messages, conversations, channels → search_messages / get_channel_history"
+  prompt += "\n- Jira tickets, sprints, projects → search_issues / get_issue"
+  prompt += "\n- Notion pages, docs, databases → search / get_page"
+  prompt += "\n- ServiceNow incidents, tables → query_table / get_record"
+  prompt += "\n- Salesforce records, accounts → soql_query / search"
+  prompt += "\n- Remember something, save info → memory_update (read first with memory_get)"
 
   let slackUser = "", slackUserId = ""
   if (env.SLACK_TOKEN) {
