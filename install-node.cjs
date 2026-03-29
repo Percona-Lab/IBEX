@@ -613,11 +613,18 @@ async function startIBEX(targetDir, env) {
     owui.unref()
     ok("Starting Open WebUI...")
 
-    // Wait for server to be ready
-    process.stdout.write("  Waiting for Open WebUI to be ready...")
-    const ready = await waitForServer(`http://127.0.0.1:${PORT}/api/config`)
+    // Wait for server to be ready (first launch can take 1-2 minutes)
+    const waitStart = Date.now()
+    process.stdout.write("  Waiting for Open WebUI to be ready... (first launch takes ~60s) ")
+    const timer = setInterval(() => {
+      const elapsed = Math.round((Date.now() - waitStart) / 1000)
+      process.stdout.write(`\r  Waiting for Open WebUI to be ready... (${elapsed}s) `)
+    }, 1000)
+    const ready = await waitForServer(`http://127.0.0.1:${PORT}/api/config`, 120000)
+    clearInterval(timer)
     if (ready) {
-      process.stdout.write(" ready!\n")
+      const elapsed = Math.round((Date.now() - waitStart) / 1000)
+      process.stdout.write(`\r  Waiting for Open WebUI to be ready... done (${elapsed}s)\n`)
       ok(`Open WebUI \u2192 http://127.0.0.1:${PORT}`)
 
       // Auto-configure: create account, set system prompt, configure models

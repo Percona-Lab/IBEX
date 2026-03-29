@@ -185,11 +185,18 @@ ${C.bold}============================================================
     }
 
     // Wait for Open WebUI to be ready
-    process.stdout.write("  Waiting for Open WebUI...")
-    const ready = await waitForServer(`http://127.0.0.1:${PORT}/api/config`)
+    const waitStart = Date.now()
+    process.stdout.write("  Waiting for Open WebUI... (0s) ")
+    const timer = setInterval(() => {
+      const elapsed = Math.round((Date.now() - waitStart) / 1000)
+      process.stdout.write(`\r  Waiting for Open WebUI... (${elapsed}s) `)
+    }, 1000)
+    const ready = await waitForServer(`http://127.0.0.1:${PORT}/api/config`, 120000)
+    clearInterval(timer)
 
     if (ready) {
-      process.stdout.write(" ready!\n")
+      const elapsed = Math.round((Date.now() - waitStart) / 1000)
+      process.stdout.write(`\r  Waiting for Open WebUI... done (${elapsed}s)\n`)
       ok(`Open WebUI → ${ibexUrl}`)
 
       if (!noBrowser) {
