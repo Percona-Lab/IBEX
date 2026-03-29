@@ -4,37 +4,43 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io/) server that connects AI assistants to your workplace tools — Slack, Notion, Jira, ServiceNow, Salesforce, and a persistent GitHub-backed memory system.
 
-Designed to run alongside [Open WebUI](https://github.com/open-webui/open-webui) with Percona's internal LLM servers (Ollama) for a self-hosted AI assistant with access to your internal tools. Branded as **Percona IBEX** in the UI.
+Designed to run alongside [Open WebUI](https://github.com/open-webui/open-webui) with Percona's internal LLM servers for a self-hosted AI assistant with access to your internal tools. Branded as **Percona IBEX** in the UI.
 
-> ⚠️ **This project is in Proof of Concept (PoC) stage.** Expect rough edges, breaking changes, and limited documentation. Feedback welcome!
+> **This project is in Proof of Concept (PoC) stage.** Expect rough edges, breaking changes, and limited documentation. Feedback welcome!
 
-## Quick Start
+## Install
 
-Open Terminal and paste:
+One command. No prerequisites — the installer handles everything (Node.js, Python, Git, Open WebUI).
+
+### macOS / Linux
 
 ```bash
-curl -sL https://github.com/Percona-Lab/IBEX/archive/refs/heads/main.tar.gz | tar xz && bash IBEX-main/install.sh
+curl -fsSL https://raw.githubusercontent.com/Percona-Lab/IBEX/main/install-ibex | bash
 ```
 
-Then follow the prompts:
-1. When asked "Which LLM backend?", press **Enter** for the default (**Option 1: Percona internal servers** — requires VPN)
-2. Enter credentials for each connector (skip any you don't need)
-3. Enter your name and email when prompted (saved to `~/.ibex-mcp.env` for future reinstalls)
-4. Optionally set up **https://ibex** as a local domain (requires admin password once)
+### Windows (PowerShell)
 
-The installer automatically:
-- Applies **Percona IBEX** branding (logo + title)
-- Creates your account and logs you in
-- Opens the browser when ready
+```powershell
+irm https://raw.githubusercontent.com/Percona-Lab/IBEX/main/install-ibex.ps1 | iex
+```
 
-> **Reinstalling?** Just run the same command again. Your credentials are preserved in `~/.ibex-mcp.env` — the installer detects them and offers to reuse.
+### What happens
 
-> **Note:** If macOS asks "iTerm would like to access data from other apps", click **Allow** — this is Docker accessing its credential store.
+1. Installs **Node.js** (via Homebrew on Mac, nodesource on Linux, official .pkg as fallback)
+2. Installs **Git** if missing
+3. Installs **[uv](https://docs.astral.sh/uv/)** — a fast Python package manager (downloads its own Python, no system Python needed)
+4. Clones the IBEX repository to `~/IBEX`
+5. Walks you through connector credentials (Slack, Notion, Jira, etc.)
+6. Installs **Open WebUI** in a virtual environment (via uv)
+7. Optionally sets up **https://ibex** as a local domain (mkcert + Caddy)
+8. Starts all services, creates your account, and opens the browser — already logged in
+
+> **Reinstalling?** Run the same command again. Your credentials in `~/.ibex-mcp.env` are preserved — the installer detects them and offers to reuse.
 
 ### After install
 
-1. Open **https://ibex** (or **http://localhost:8080** if you skipped the custom domain) — you're already logged in
-2. Click the **wrench icon** in the chat box and **enable all tools** (required before using any connectors)
+1. Open **https://ibex** (or **http://ibex.localhost:8080** if you skipped the custom domain) — you're already logged in
+2. Click the **wrench icon** in the chat box and **enable all tools**
 3. Try these prompts:
    - "Search Slack for messages about IBEX"
    - "Show me my open Jira tickets"
@@ -50,22 +56,6 @@ The installer automatically:
 
 All other models are hidden by default. Unhide them in Admin Panel → Settings → Models if needed.
 
-### Alternative: Clone from GitHub
-
-```bash
-git clone https://github.com/Percona-Lab/IBEX.git ~/IBEX && cd ~/IBEX && bash install.sh
-```
-
-> Already installed? Run `~/IBEX/update.sh` to update Open WebUI and IBEX.
-
-**Day-to-day commands:**
-
-| Command | What it does |
-|---------|--------------|
-| `~/IBEX/start.sh` | Start MCP servers + Open WebUI |
-| `~/IBEX/configure.sh` | Add or update connector credentials + rebuild system prompt |
-| `~/IBEX/update.sh` | Update Open WebUI and IBEX to the latest versions |
-
 ## Features
 
 | Server | Port | Tools | Capability |
@@ -79,57 +69,67 @@ git clone https://github.com/Percona-Lab/IBEX.git ~/IBEX && cd ~/IBEX && bash in
 
 Each server runs independently — start only the ones you need.
 
-## Branding
+## Day-to-Day Usage
 
-The installer automatically applies Percona IBEX branding to Open WebUI:
-- IBEX logo replaces the default Open WebUI logo
-- Title shows "Percona IBEX" instead of "Open WebUI"
-- Branding assets are in the `branding/` directory
+After install, start IBEX with:
 
-## Custom Domain (Optional)
+```bash
+cd ~/IBEX && npm run start
+```
 
-During install, you can optionally set up **https://ibex** as a local shortcut:
-- Requires admin password (one-time) for the local TLS certificate and hosts file entry
+Or run the installer again to reconfigure:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Percona-Lab/IBEX/main/install-ibex | bash
+```
+
+## Custom Domain
+
+During install, you can set up **https://ibex** as a local shortcut:
 - Uses [mkcert](https://github.com/FiloSottile/mkcert) for locally-trusted TLS + [Caddy](https://caddyserver.com/) as reverse proxy
-- Firefox users need `nss` installed (`brew install nss`) for the certificate to be trusted
-- On reinstall, the domain is automatically restored if it was previously configured
+- Requires admin password once for the certificate and `/etc/hosts` entry
+- Automatically restored on reinstall if previously configured
+- Without it, IBEX is available at **http://ibex.localhost:8080** (works in Chrome, Firefox, Edge — no setup needed)
 
 ## How It Works
 
-1. **`install.sh`** checks for dependencies (Homebrew, Node.js, Docker), installs anything missing, walks you through connector credentials, sets up Open WebUI in Docker with Percona LLM servers pre-configured, applies branding, hides non-recommended models, auto-creates your account, and registers all MCP tool servers automatically.
+### Installer chain
 
-2. **`start.sh`** reads `~/.ibex-mcp.env` and only launches servers whose credentials are configured. It also starts the Open WebUI Docker container.
+```
+curl | bash
+  → install-ibex (bash)      Installs Node.js + Git
+  → install-node.cjs (node)  Installs uv, clones repo, credentials, Open WebUI, starts everything
+  → configure-owui.js        Creates account, sets system prompt, configures models
+```
 
-3. **`update.sh`** pulls the latest IBEX code (if installed via git) and updates the Open WebUI Docker container to the latest version. Your data, settings, and accounts are preserved.
+### Architecture
 
-4. **`configure.sh`** lets you add or change connector credentials at any time. Run `~/IBEX/start.sh` afterwards to apply changes.
+```
+Browser → https://ibex (Caddy) → Open WebUI (:8080) → MCP servers (:3001-3006) → APIs
+                                       ↓
+                                  Percona LLM servers (Ollama)
+```
 
-## System Prompt
-
-The installer automatically generates a tailored system prompt based on which connectors you configured and sets it at the user level in Open WebUI (applies to all models). It's also saved to `~/.ibex-system-prompt.txt` for reference.
-
-The system prompt includes:
-- Anti-thinking/anti-looping instructions for local models
-- User identity for Slack and Jira (so "my tickets" works correctly)
-- Tool usage guidance (one tool call per question, format as table)
-
-If you need to set it manually: go to **Settings → General → System Prompt** and paste the contents of `~/.ibex-system-prompt.txt`.
+- **Open WebUI** runs natively (no Docker) via a Python virtual environment managed by `uv`
+- **MCP servers** run as detached Node.js processes
+- **Credentials** stored in `~/.ibex-mcp.env` (chmod 600)
+- **System prompt** auto-generated based on configured connectors
 
 ## Manual Setup
 
-If you prefer to set things up by hand instead of using the installer.
+If you prefer to set things up by hand.
 
 ### 1. Clone and install
 
 ```bash
-gh repo clone Percona-Lab/IBEX ~/IBEX -b ollama-backend
+git clone https://github.com/Percona-Lab/IBEX.git ~/IBEX
 cd ~/IBEX
 npm install
 ```
 
 ### 2. Configure credentials
 
-Create `~/.ibex-mcp.env` with the credentials for the connectors you want:
+Create `~/.ibex-mcp.env`:
 
 ```bash
 # Slack (user token required for search)
@@ -159,27 +159,7 @@ SALESFORCE_INSTANCE_URL=https://yourcompany.my.salesforce.com
 SALESFORCE_ACCESS_TOKEN=...
 ```
 
-Only include the variables for connectors you want to use. Or use the interactive configurator:
-
-```bash
-~/IBEX/configure.sh
-```
-
-### 3. Start Open WebUI
-
-```bash
-docker run -d \
-  --name open-webui \
-  -p 8080:8080 \
-  -v ~/open-webui-data:/app/backend/data \
-  -e OLLAMA_BASE_URL=https://mac-studio-ollama.int.percona.com \
-  -e WEBUI_NAME="Percona IBEX" \
-  ghcr.io/open-webui/open-webui:latest
-```
-
-Open http://localhost:8080 and create your admin account.
-
-### Running servers individually
+### 3. Start servers individually
 
 ```bash
 cd ~/IBEX
@@ -209,36 +189,32 @@ All servers support three transport modes:
 ## Project Structure
 
 ```
-├── install.sh             # Interactive installer (macOS)
-├── Install IBEX.command   # Double-click installer for zip distribution
-├── configure.sh           # Add/update connector credentials
-├── start.sh               # Launch configured servers + Open WebUI
-├── update.sh              # Update Open WebUI and IBEX
-├── Caddyfile              # Reverse proxy config for https://ibex
-├── branding/              # Percona IBEX logo and icon assets
-├── server.js              # All-in-one MCP server (all tools)
-├── notion_indexer.js       # Notion workspace indexer
-├── servers/
-│   ├── shared.js          # Shared transport, startup, and error handling
-│   ├── slack.js           # Slack MCP server (port 3001)
-│   ├── notion.js          # Notion MCP server (port 3002)
-│   ├── jira.js            # Jira MCP server (port 3003)
-│   ├── memory.js          # Memory MCP server (port 3004)
-│   ├── servicenow.js      # ServiceNow MCP server (port 3005)
-│   └── salesforce.js      # Salesforce MCP server (port 3006)
-├── connectors/
-│   ├── slack.js           # Slack Web API connector
-│   ├── notion.js          # Notion API connector
-│   ├── jira.js            # Jira Cloud API connector
-│   ├── github.js          # GitHub Contents API connector (memory backend)
-│   ├── google-docs.js     # Google Docs API connector (memory sync)
-│   ├── servicenow.js      # ServiceNow Table API connector
-│   ├── salesforce.js      # Salesforce REST API connector
-│   └── memory-sync.js     # Sync orchestrator (Notion + Google Docs)
+├── install-ibex               # Bash bootstrap (installs Node + Git, runs installer)
+├── install-ibex.ps1           # PowerShell bootstrap for Windows
+├── install-node.cjs           # Main installer (Node.js, cross-platform)
 ├── scripts/
-│   ├── build-prompt.sh    # System prompt generator (shared)
-│   ├── launchd-service.sh # Background service manager (macOS)
-│   └── google-auth.js     # One-time Google OAuth2 setup
+│   ├── configure-owui.js      # Auto-configures Open WebUI (account, prompt, models)
+│   ├── build-prompt.sh        # System prompt generator
+│   ├── launchd-service.sh     # Background service manager (macOS)
+│   └── google-auth.js         # One-time Google OAuth2 setup
+├── server.js                  # All-in-one MCP server (all tools)
+├── servers/
+│   ├── shared.js              # Shared transport, startup, and error handling
+│   ├── slack.js               # Slack MCP server (port 3001)
+│   ├── notion.js              # Notion MCP server (port 3002)
+│   ├── jira.js                # Jira MCP server (port 3003)
+│   ├── memory.js              # Memory MCP server (port 3004)
+│   ├── servicenow.js          # ServiceNow MCP server (port 3005)
+│   └── salesforce.js          # Salesforce MCP server (port 3006)
+├── connectors/
+│   ├── slack.js               # Slack Web API connector
+│   ├── notion.js              # Notion API connector
+│   ├── jira.js                # Jira Cloud API connector
+│   ├── github.js              # GitHub Contents API connector
+│   ├── servicenow.js          # ServiceNow Table API connector
+│   ├── salesforce.js          # Salesforce REST API connector
+│   └── memory-sync.js         # Sync orchestrator
+├── branding/                  # Percona IBEX logo and icon assets
 └── package.json
 ```
 

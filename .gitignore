@@ -17,8 +17,7 @@ credentials.json
 notion_index.json
 notion_roots.json
 certs/
-branding/env.py
-
-certs/
-branding/env.py
 Caddyfile
+.webui_secret_key
+branding/env.py
+app/
