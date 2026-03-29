@@ -39,22 +39,16 @@ install_node() {
 
   case "$(uname -s)" in
     Darwin)
-      if command -v brew &>/dev/null; then
-        brew install node
-      else
-        # Use official .pkg installer — no brew needed
-        warn "Downloading Node.js from nodejs.org..."
-        local arch
-        arch=$(uname -m)
-        [ "$arch" = "x86_64" ] && arch="x64"
-        [ "$arch" = "arm64" ] && arch="arm64"
-        local pkg_url="https://nodejs.org/dist/v22.16.0/node-v22.16.0.pkg"
-        local pkg_file
-        pkg_file=$(mktemp /tmp/node-install.XXXXXX.pkg)
-        curl -fsSL "$pkg_url" -o "$pkg_file"
-        sudo installer -pkg "$pkg_file" -target /
-        rm -f "$pkg_file"
+      if ! command -v brew &>/dev/null; then
+        warn "Installing Homebrew first..."
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        if [ -f /opt/homebrew/bin/brew ]; then
+          eval "$(/opt/homebrew/bin/brew shellenv)"
+        elif [ -f /usr/local/bin/brew ]; then
+          eval "$(/usr/local/bin/brew shellenv)"
+        fi
       fi
+      brew install node
       ;;
     Linux)
       if command -v apt-get &>/dev/null; then
