@@ -218,8 +218,11 @@ async function main() {
       settings.params.num_predict = 2048
     }
 
+    // Auto-enable MCP tools for every new chat
+    settings.tool_ids = ["server:mcp:None"]
+
     await api("POST", "/api/v1/users/user/settings/update", settings, token)
-    log("\u2713", "System prompt configured")
+    log("\u2713", "System prompt configured (tools auto-enabled)")
   } catch (e) {
     log("\u2717", `Failed to set system prompt: ${e.message}`)
   }
