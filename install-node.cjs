@@ -470,7 +470,7 @@ async function setupLocalDomain(targetDir, port, fallbackUrl) {
   ok(`Available at ${localhostUrl}`)
 
   // Optionally upgrade to https://ibex
-  const setupHttps = await confirm("Also set up https://ibex? (requires admin password, mkcert, caddy)", false)
+  const setupHttps = await confirm("Also set up https://ibex? (requires admin password, mkcert, caddy)", true)
   if (!setupHttps) return localhostUrl
 
   // Install mkcert and caddy
@@ -590,7 +590,9 @@ async function startIBEX(targetDir, env) {
       // Auto-configure: create account, set system prompt, configure models
       let token = null
       try {
-        const output = runQuiet(`node scripts/configure-owui.js --port ${PORT}`)
+        const output = execSync(`node scripts/configure-owui.js --port ${PORT}`, {
+          cwd: targetDir, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"]
+        }).trim()
         // Print the configure output (minus the token line)
         for (const line of output.split("\n")) {
           if (line.startsWith("__TOKEN__=")) {
@@ -599,8 +601,9 @@ async function startIBEX(targetDir, env) {
             console.log(line)
           }
         }
-      } catch {
+      } catch (err) {
         warn("Auto-configuration skipped — configure manually")
+        if (err.stderr) warn(err.stderr.toString().trim())
       }
 
       // Set up https://ibex local domain
