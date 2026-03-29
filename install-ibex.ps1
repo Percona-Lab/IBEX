@@ -88,7 +88,12 @@ Install-NodeIfMissing
 Write-Host ""
 
 # Download and run the Node installer
-$tmpFile = [System.IO.Path]::GetTempFileName() + ".js"
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Percona-Lab/IBEX/main/install-node.cjs" -OutFile $tmpFile
-node $tmpFile @args
-Remove-Item $tmpFile -ErrorAction SilentlyContinue
+# Use a unique temp file name (no .js extension needed)
+$tmpFile = Join-Path $env:TEMP "ibex-install-$(Get-Random).cjs"
+try {
+    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Percona-Lab/IBEX/main/install-node.cjs" -OutFile $tmpFile
+    # Run node with stdin connected to the console (not the pipe)
+    Start-Process -FilePath "node" -ArgumentList $tmpFile -NoNewWindow -Wait
+} finally {
+    Remove-Item $tmpFile -ErrorAction SilentlyContinue
+}
