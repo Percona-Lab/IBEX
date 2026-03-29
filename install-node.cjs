@@ -498,7 +498,7 @@ async function setupOpenWebUI(targetDir) {
     const activate = isWin
       ? `"${path.join(envDir, "Scripts", "activate")}"`
       : `source "${path.join(envDir, "bin", "activate")}"`
-    run(`${activate} && uv pip install open-webui onnxruntime==1.20.1 itsdangerous`, {
+    run(`${activate} && uv pip install "open-webui>=0.8.0" onnxruntime==1.20.1 itsdangerous`, {
       cwd: appDir, shell: true
     })
     ok("Open WebUI installed")
