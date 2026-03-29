@@ -367,9 +367,6 @@ ${C.bold}============================================================
     warn("Install with: uv tool install mcpo")
   }
 
-  // ── Apply branding before OWUI starts ───────────────────────
-  applyBranding()
-
   // ── Start Open WebUI ────────────────────────────────────────
   const PORT = 8080
   const owuiBin = isWin
@@ -426,6 +423,9 @@ ${C.bold}============================================================
       const elapsed = Math.round((Date.now() - waitStart) / 1000)
       process.stdout.write(`\r  Waiting for Open WebUI... done (${elapsed}s)\n`)
       ok(`Open WebUI → ${ibexUrl}`)
+
+      // Apply branding AFTER OWUI is ready (it overwrites static files on startup)
+      applyBranding()
 
       if (!noBrowser) {
         // Auto-authenticate
