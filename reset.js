@@ -1,4 +1,4 @@
-module.exports = {
+export default {
   run: [
     {
       method: "fs.rm",

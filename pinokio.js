@@ -1,5 +1,9 @@
-const path = require("path")
-module.exports = {
+import path from "path"
+import { fileURLToPath } from "url"
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+export default {
   version: "5.0",
   title: "Percona IBEX",
   description: "Integration Bridge for EXtended systems — MCP server connecting AI assistants to Slack, Notion, Jira, ServiceNow, Salesforce, and persistent memory. https://github.com/Percona-Lab/IBEX",

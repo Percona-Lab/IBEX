@@ -1,4 +1,4 @@
-module.exports = {
+export default {
   run: [
     {
       method: "shell.run",

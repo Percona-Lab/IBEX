@@ -1,7 +1,8 @@
-module.exports = async (kernel) => {
-  const fs = require("fs")
-  const path = require("path")
-  const os = require("os")
+import fs from "fs"
+import path from "path"
+import os from "os"
+
+export default async (kernel) => {
   const PORT = await kernel.port()
   const envPath = path.join(os.homedir(), ".ibex-mcp.env")
   const env = {}

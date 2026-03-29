@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-const fs = require("fs")
-const path = require("path")
-const os = require("os")
-const { execSync } = require("child_process")
+import fs from "fs"
+import path from "path"
+import os from "os"
+import { execSync } from "child_process"
 
 const envPath = path.join(os.homedir(), ".ibex-mcp.env")
 
