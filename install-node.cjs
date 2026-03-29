@@ -375,7 +375,7 @@ async function setupOpenWebUI(targetDir) {
 
   try {
     // uv downloads the right Python automatically — no system Python needed
-    run(`uv venv "${envDir}" --python 3.12`, { cwd: appDir })
+    run(`uv venv "${envDir}" --python 3.12 --clear`, { cwd: appDir })
     const activate = isWin
       ? `"${path.join(envDir, "Scripts", "activate")}"`
       : `source "${path.join(envDir, "bin", "activate")}"`
