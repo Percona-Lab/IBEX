@@ -277,6 +277,7 @@ async function main() {
     }))
 
   // Add Percona-DK if installed (stdio server proxied via MCPO)
+  let hasDK = false
   const perconaDkBin = isWin
     ? path.join(os.homedir(), "Percona-DK", ".venv", "Scripts", "percona-dk-mcp.exe")
     : path.join(os.homedir(), "Percona-DK", ".venv", "bin", "percona-dk-mcp")
@@ -289,10 +290,12 @@ async function main() {
       key: "",
       config: { enable: true }
     })
+    hasDK = true
   }
 
   // OWUI assigns sequential IDs: server:0, server:1, etc.
   const toolServerIds = connections.map((_, i) => `server:${i}`)
+  const toolServerIdsNoDK = hasDK ? toolServerIds.slice(0, -1) : toolServerIds
 
   try {
     if (connections.length > 0) {
@@ -320,7 +323,9 @@ async function main() {
     await api("POST", "/api/v1/configs/models", {
       DEFAULT_MODELS: DEFAULT_MODEL,
       DEFAULT_PINNED_MODELS: null,
-      MODEL_ORDER_LIST: [...RECOMMENDED_MODELS],
+      MODEL_ORDER_LIST: hasDK
+        ? [...RECOMMENDED_MODELS, ...Array.from(RECOMMENDED_MODELS).map(m => `${m}-no-dk`)]
+        : [...RECOMMENDED_MODELS],
       DEFAULT_MODEL_METADATA: {},
       DEFAULT_MODEL_PARAMS: {}
     }, token)
@@ -375,6 +380,24 @@ async function main() {
       log("\u26a0", "No models available (VPN may be disconnected). Tools pre-configured for when models become available.")
     } else if (hidden > 0) {
       log("\u2713", `Showing recommended models only (${hidden} hidden)`)
+    }
+
+    // Create "no Percona DK" model variants for demos without doc search
+    if (hasDK) {
+      for (const mid of RECOMMENDED_MODELS) {
+        const noDkId = `${mid}-no-dk`
+        const displayName = mid.split("/").pop() + " (no Percona DK)"
+        const payload = {
+          id: noDkId,
+          name: displayName,
+          base_model_id: mid,
+          meta: { hidden: false, toolIds: toolServerIdsNoDK },
+          params: { function_calling: "native" }
+        }
+        await api("POST", "/api/v1/models/create", payload, token)
+        await api("POST", `/api/v1/models/model/update?id=${encodeURIComponent(noDkId)}`, payload, token)
+      }
+      log("\u2713", `Created "no Percona DK" model variants`)
     }
   } catch (e) {
     log("\u26a0", `Model config: ${e.message}`)
