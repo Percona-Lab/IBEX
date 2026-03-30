@@ -74,7 +74,7 @@ async function buildSystemPrompt(env) {
   prompt += " IMPORTANT: Call each tool at most ONCE per user message. After receiving a tool result, present it for the user immediately. Do NOT call another tool unless absolutely necessary."
   prompt += " If a tool returns empty results, tell the user — do not retry with different queries."
   prompt += "\n\n## Tool routing — pick the RIGHT tool:"
-  prompt += "\n- Percona product docs, installation, configuration, troubleshooting → search_percona_docs / get_percona_doc"
+  prompt += "\n- Percona product docs, installation, configuration, troubleshooting, wsrep, PMM, XtraBackup → search_percona_docs (then answer from results)"
   prompt += "\n- Writing style, preferences, tone, personal context → memory_search / memory_get"
   prompt += "\n- How to install/use IBEX, architecture, setup → memory_search (NOT Slack)"
   prompt += "\n- Slack messages, conversations, channels → search_messages / get_channel_history"
@@ -158,11 +158,28 @@ async function buildSystemPrompt(env) {
     ? path.join(os.homedir(), "Percona-DK", ".venv", "Scripts", "percona-dk-mcp.exe")
     : path.join(os.homedir(), "Percona-DK", ".venv", "bin", "percona-dk-mcp")
   if (fs.existsSync(perconaDkMcp)) {
-    prompt += "\n\n## Percona Documentation"
-    prompt += "\n- search_percona_docs: Semantic search across all Percona documentation (MySQL, PXC, PXB, PMM, K8s operators, Valkey)"
-    prompt += "\n  Returns ranked results with relevance scores and page URLs"
-    prompt += "\n- get_percona_doc: Get full content of a specific Percona documentation page by repo and path"
-    prompt += "\n  Example: repo='percona/psmysql-docs', path='docs/install.md'"
+    prompt += "\n\n## Percona Documentation (Percona-DK)"
+    prompt += "\n- search_percona_docs: Semantic search across all Percona product docs"
+    prompt += "\n  - Covers: Percona Server for MySQL, XtraDB Cluster (PXC), XtraBackup (PXB), PMM, K8s Operators, Valkey, Toolkit"
+    prompt += "\n  - Returns ranked text chunks with source repo, file path, section title, URL, and relevance score"
+    prompt += "\n  - Use a specific technical query, not a vague one. Example: query='wsrep_cluster_address configuration PXC' (not 'PXC setup')"
+    prompt += "\n  - Set top_k=5 for broad questions, top_k=3 for specific ones"
+    prompt += "\n- get_percona_doc: Fetch the FULL markdown content of a specific doc page"
+    prompt += "\n  - Use the repo and path from search results. Example: repo='percona/pxc-docs', path='docs/singlebox.md'"
+    prompt += "\n  - Only use this if search_percona_docs did not return enough detail. Usually search is enough."
+    prompt += "\n"
+    prompt += "\n### How to answer Percona documentation questions:"
+    prompt += "\n1. Call search_percona_docs ONCE with a specific query (top_k=5)"
+    prompt += "\n2. READ the returned text chunks. They contain actual documentation content with commands, config, and steps."
+    prompt += "\n3. Immediately write your answer using ONLY the information from the search results. Include:"
+    prompt += "\n   - The actual configuration values, commands, or steps from the docs"
+    prompt += "\n   - Code blocks for any config files or commands"
+    prompt += "\n   - Source URL(s) at the end so the user can read the full page"
+    prompt += "\n"
+    prompt += "\nCRITICAL RULES for Percona docs:"
+    prompt += "\n- Call search_percona_docs ONCE, then write your answer. Do NOT call get_percona_doc unless the user asks for more detail."
+    prompt += "\n- Do NOT say 'I found results' or 'Let me search for more'. Present the answer directly."
+    prompt += "\n- The search results ARE the answer. Read them and format them for the user."
   }
 
   if (env.GITHUB_TOKEN && env.GITHUB_OWNER && env.GITHUB_REPO) {
@@ -296,6 +313,8 @@ async function main() {
   // OWUI assigns sequential IDs: server:0, server:1, etc.
   const toolServerIds = connections.map((_, i) => `server:${i}`)
   const toolServerIdsNoDK = hasDK ? toolServerIds.slice(0, -1) : toolServerIds
+  const DEMO_EMAIL = "demo@percona.com"
+  const DEMO_PASSWORD = "changeme"
 
   try {
     if (connections.length > 0) {
@@ -323,9 +342,7 @@ async function main() {
     await api("POST", "/api/v1/configs/models", {
       DEFAULT_MODELS: DEFAULT_MODEL,
       DEFAULT_PINNED_MODELS: null,
-      MODEL_ORDER_LIST: hasDK
-        ? [...RECOMMENDED_MODELS, ...Array.from(RECOMMENDED_MODELS).map(m => `${m}-no-dk`)]
-        : [...RECOMMENDED_MODELS],
+      MODEL_ORDER_LIST: [...RECOMMENDED_MODELS],
       DEFAULT_MODEL_METADATA: {},
       DEFAULT_MODEL_PARAMS: {}
     }, token)
@@ -382,22 +399,39 @@ async function main() {
       log("\u2713", `Showing recommended models only (${hidden} hidden)`)
     }
 
-    // Create "no Percona DK" model variants for demos without doc search
+    // Create demo account without Percona-DK tools (for demos to external audiences)
     if (hasDK) {
-      for (const mid of RECOMMENDED_MODELS) {
-        const noDkId = `${mid}-no-dk`
-        const displayName = mid.split("/").pop() + " (no Percona DK)"
-        const payload = {
-          id: noDkId,
-          name: displayName,
-          base_model_id: mid,
-          meta: { hidden: false, toolIds: toolServerIdsNoDK },
-          params: { function_calling: "native" }
-        }
-        await api("POST", "/api/v1/models/create", payload, token)
-        await api("POST", `/api/v1/models/model/update?id=${encodeURIComponent(noDkId)}`, payload, token)
+      let demoToken
+      // Try signing in first (account may already exist)
+      try {
+        const signin = await api("POST", "/api/v1/auths/signin", {
+          email: DEMO_EMAIL, password: DEMO_PASSWORD
+        })
+        demoToken = signin.token
+      } catch {}
+      // If no account yet, create via admin API (signup is disabled after first admin)
+      if (!demoToken) {
+        try {
+          const add = await api("POST", "/api/v1/auths/add", {
+            email: DEMO_EMAIL, password: DEMO_PASSWORD, name: "Demo User", role: "user"
+          }, token)
+          demoToken = add.token
+        } catch {}
       }
-      log("\u2713", `Created "no Percona DK" model variants`)
+      if (demoToken) {
+        try {
+          let demoSettings = await api("GET", "/api/v1/users/user/settings", null, demoToken) || {}
+          demoSettings.tool_ids = toolServerIdsNoDK
+          if (!demoSettings.ui) demoSettings.ui = {}
+          demoSettings.ui.system = sysPrompt
+          await api("POST", "/api/v1/users/user/settings/update", demoSettings, demoToken)
+          log("\u2713", `Demo account ready: ${DEMO_EMAIL} (no Percona-DK tools)`)
+        } catch (e) {
+          log("\u26a0", `Demo account tool config: ${e.message}`)
+        }
+      } else {
+        log("\u26a0", "Could not create demo account")
+      }
     }
   } catch (e) {
     log("\u26a0", `Model config: ${e.message}`)
