@@ -74,7 +74,7 @@ async function buildSystemPrompt(env) {
   prompt += " IMPORTANT: Call each tool at most ONCE per user message. After receiving a tool result, present it for the user immediately. Do NOT call another tool unless absolutely necessary."
   prompt += " If a tool returns empty results, tell the user — do not retry with different queries."
   prompt += "\n\n## Tool routing — pick the RIGHT tool:"
-  prompt += "\n- Percona product docs, installation, configuration, troubleshooting, wsrep, PMM, XtraBackup → search_percona_docs (then answer from results)"
+  prompt += "\n- Percona product docs, installation, configuration, troubleshooting → search_percona_docs / get_percona_doc"
   prompt += "\n- Writing style, preferences, tone, personal context → memory_search / memory_get"
   prompt += "\n- How to install/use IBEX, architecture, setup → memory_search (NOT Slack)"
   prompt += "\n- Slack messages, conversations, channels → search_messages / get_channel_history"
@@ -158,28 +158,11 @@ async function buildSystemPrompt(env) {
     ? path.join(os.homedir(), "Percona-DK", ".venv", "Scripts", "percona-dk-mcp.exe")
     : path.join(os.homedir(), "Percona-DK", ".venv", "bin", "percona-dk-mcp")
   if (fs.existsSync(perconaDkMcp)) {
-    prompt += "\n\n## Percona Documentation (Percona-DK)"
-    prompt += "\n- search_percona_docs: Semantic search across all Percona product docs"
-    prompt += "\n  - Covers: Percona Server for MySQL, XtraDB Cluster (PXC), XtraBackup (PXB), PMM, K8s Operators, Valkey, Toolkit"
-    prompt += "\n  - Returns ranked text chunks with source repo, file path, section title, URL, and relevance score"
-    prompt += "\n  - Use a specific technical query, not a vague one. Example: query='wsrep_cluster_address configuration PXC' (not 'PXC setup')"
-    prompt += "\n  - Set top_k=5 for broad questions, top_k=3 for specific ones"
-    prompt += "\n- get_percona_doc: Fetch the FULL markdown content of a specific doc page"
-    prompt += "\n  - Use the repo and path from search results. Example: repo='percona/pxc-docs', path='docs/singlebox.md'"
-    prompt += "\n  - Only use this if search_percona_docs did not return enough detail. Usually search is enough."
-    prompt += "\n"
-    prompt += "\n### How to answer Percona documentation questions:"
-    prompt += "\n1. Call search_percona_docs ONCE with a specific query (top_k=5)"
-    prompt += "\n2. READ the returned text chunks. They contain actual documentation content with commands, config, and steps."
-    prompt += "\n3. Immediately write your answer using ONLY the information from the search results. Include:"
-    prompt += "\n   - The actual configuration values, commands, or steps from the docs"
-    prompt += "\n   - Code blocks for any config files or commands"
-    prompt += "\n   - Source URL(s) at the end so the user can read the full page"
-    prompt += "\n"
-    prompt += "\nCRITICAL RULES for Percona docs:"
-    prompt += "\n- Call search_percona_docs ONCE, then write your answer. Do NOT call get_percona_doc unless the user asks for more detail."
-    prompt += "\n- Do NOT say 'I found results' or 'Let me search for more'. Present the answer directly."
-    prompt += "\n- The search results ARE the answer. Read them and format them for the user."
+    prompt += "\n\n## Percona Documentation"
+    prompt += "\n- search_percona_docs: Semantic search across all Percona documentation (MySQL, PXC, PXB, PMM, K8s operators, Valkey)"
+    prompt += "\n  Returns ranked results with relevance scores and page URLs"
+    prompt += "\n- get_percona_doc: Get full content of a specific Percona documentation page by repo and path"
+    prompt += "\n  Example: repo='percona/psmysql-docs', path='docs/install.md'"
   }
 
   if (env.GITHUB_TOKEN && env.GITHUB_OWNER && env.GITHUB_REPO) {
