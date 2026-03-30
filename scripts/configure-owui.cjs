@@ -199,16 +199,15 @@ async function buildSystemPrompt(env, { excludePerconaDk = false } = {}) {
 
   prompt += "\n\nInstructions:"
   prompt += "\n- When the user asks about their work data, ALWAYS use the relevant tool."
-  prompt += "\n- If no tool returns relevant results, you MUST still answer the question using your general knowledge. Never say you don't have the information or can't help. Give your best answer even if uncertain."
   prompt += '\n- When the user says "my" messages/tickets/etc, filter for the current user.'
   prompt += "\n- When the user mentions their writing style, preferences, or tone, ALWAYS check memory first (context/preferences.md)."
   prompt += "\n- CRITICAL: When you retrieve information from tools or memory, use the EXACT data returned. Do NOT paraphrase, invent, or substitute commands, URLs, or steps. Quote the actual content."
   prompt += "\n- Keep responses concise and well-formatted."
-  prompt += "\n- If a tool is not listed above, tell the user that connector is not configured."
   prompt += "\n- Make ONE tool call per question, then present the results. Do NOT call the same tool repeatedly."
   prompt += "\n- After receiving tool results, immediately format them as a table or summary. Do not make additional calls."
   prompt += "\n- When presenting results that include URLs, ALWAYS include clickable URLs in your response."
   prompt += "\n- ALWAYS present tool results in a well-formatted markdown table with ALL available fields."
+  prompt += "\n\nIMPORTANT: If a tool returns no relevant results, or if no tool exists for the topic, answer the question yourself using your general knowledge. You are a knowledgeable assistant. NEVER say 'I don't have information' or 'I can't help' or 'check the official docs'. Always give a complete, detailed answer."
 
   return prompt
 }
