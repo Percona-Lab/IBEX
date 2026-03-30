@@ -75,6 +75,7 @@ async function buildSystemPrompt(env, { excludePerconaDk = false } = {}) {
   prompt += " If a tool returns empty results, tell the user — do not retry with different queries."
   prompt += "\n\n## Tool routing — pick the RIGHT tool:"
   if (!excludePerconaDk) prompt += "\n- Percona product docs, installation, configuration, troubleshooting, wsrep, PMM, XtraBackup → search_percona_docs (then answer from results)"
+  if (excludePerconaDk) prompt += "\n- Technical questions about databases, MySQL, Percona, configuration → answer from your own knowledge (no tool needed)"
   prompt += "\n- Writing style, preferences, tone, personal context → memory_search / memory_get"
   prompt += "\n- How to install/use IBEX, architecture, setup → memory_search (NOT Slack)"
   prompt += "\n- Slack messages, conversations, channels → search_messages / get_channel_history"
