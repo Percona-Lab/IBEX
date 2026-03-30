@@ -413,7 +413,7 @@ async function main() {
       if (!demoToken) {
         try {
           const add = await api("POST", "/api/v1/auths/add", {
-            email: DEMO_EMAIL, password: DEMO_PASSWORD, name: "Demo User", role: "user"
+            email: DEMO_EMAIL, password: DEMO_PASSWORD, name: "Demo User", role: "admin"
           }, token)
           demoToken = add.token
         } catch {}
