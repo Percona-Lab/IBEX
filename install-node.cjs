@@ -447,6 +447,21 @@ async function promptCredentials(envPath) {
   const llmChoice = await ask("Choose", "1")
 
   if (llmChoice === "1") {
+    // Check VPN connectivity
+    process.stdout.write(`  Checking VPN connection... `)
+    try {
+      execSync('curl -sf --connect-timeout 5 https://mac-studio-lm.int.percona.com/v1/models > /dev/null 2>&1')
+      console.log(`${C.green}connected${C.reset}`)
+    } catch {
+      console.log(`${C.red}not connected${C.reset}`)
+      warn("Cannot reach Percona LLM servers (mac-studio-lm.int.percona.com)")
+      warn("Connect to OpenVPN (openvpn.percona.com) and try again")
+      const cont = await confirm("Continue anyway? (models won't be available until VPN is connected)", false)
+      if (!cont) {
+        console.log("\n  Connect to VPN and re-run the installer.\n")
+        process.exit(0)
+      }
+    }
     Object.assign(env, LLM_OPTIONS.percona)
     ok("Using Percona internal LLM servers")
   } else if (llmChoice === "2") {

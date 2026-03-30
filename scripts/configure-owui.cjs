@@ -329,8 +329,12 @@ async function main() {
     const modelsList = modelsResp.data || modelsResp || []
     let hidden = 0
 
+    // Always configure recommended models with toolIds + function_calling,
+    // even if they don't appear in the upstream model list (VPN may be off)
+    const seenModels = new Set()
     for (const m of modelsList) {
       const mid = m.id || ""
+      seenModels.add(mid)
       if (RECOMMENDED_MODELS.has(mid)) {
         const payload = {
           id: mid,
@@ -353,7 +357,23 @@ async function main() {
       }
     }
 
-    if (hidden > 0) {
+    // Pre-configure recommended models even if not yet visible (VPN off)
+    for (const mid of RECOMMENDED_MODELS) {
+      if (!seenModels.has(mid)) {
+        const payload = {
+          id: mid,
+          name: mid,
+          meta: { hidden: false, toolIds: toolServerIds },
+          params: { function_calling: "native" }
+        }
+        await api("POST", "/api/v1/models/create", payload, token)
+        await api("POST", `/api/v1/models/model/update?id=${encodeURIComponent(mid)}`, payload, token)
+      }
+    }
+
+    if (modelsList.length === 0) {
+      log("\u26a0", "No models available (VPN may be disconnected). Tools pre-configured for when models become available.")
+    } else if (hidden > 0) {
       log("\u2713", `Showing recommended models only (${hidden} hidden)`)
     }
   } catch (e) {
