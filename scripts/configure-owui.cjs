@@ -67,14 +67,14 @@ function loadEnv() {
   return env
 }
 
-async function buildSystemPrompt(env) {
+async function buildSystemPrompt(env, { excludePerconaDk = false } = {}) {
   let prompt = "You are a helpful work assistant with access to workplace tools via IBEX."
   prompt += " Do not use <think> blocks or internal reasoning. Respond directly and concisely."
   prompt += " When a tool is available for the user's request, call it immediately without explaining your reasoning."
   prompt += " IMPORTANT: Call each tool at most ONCE per user message. After receiving a tool result, present it for the user immediately. Do NOT call another tool unless absolutely necessary."
   prompt += " If a tool returns empty results, tell the user — do not retry with different queries."
   prompt += "\n\n## Tool routing — pick the RIGHT tool:"
-  prompt += "\n- Percona product docs, installation, configuration, troubleshooting, wsrep, PMM, XtraBackup → search_percona_docs (then answer from results)"
+  if (!excludePerconaDk) prompt += "\n- Percona product docs, installation, configuration, troubleshooting, wsrep, PMM, XtraBackup → search_percona_docs (then answer from results)"
   prompt += "\n- Writing style, preferences, tone, personal context → memory_search / memory_get"
   prompt += "\n- How to install/use IBEX, architecture, setup → memory_search (NOT Slack)"
   prompt += "\n- Slack messages, conversations, channels → search_messages / get_channel_history"
@@ -157,7 +157,7 @@ async function buildSystemPrompt(env) {
   const perconaDkMcp = isWin
     ? path.join(os.homedir(), "Percona-DK", ".venv", "Scripts", "percona-dk-mcp.exe")
     : path.join(os.homedir(), "Percona-DK", ".venv", "bin", "percona-dk-mcp")
-  if (fs.existsSync(perconaDkMcp)) {
+  if (fs.existsSync(perconaDkMcp) && !excludePerconaDk) {
     prompt += "\n\n## Percona Documentation (Percona-DK)"
     prompt += "\n- search_percona_docs: Semantic search across all Percona product docs"
     prompt += "\n  - Covers: Percona Server for MySQL, XtraDB Cluster (PXC), XtraBackup (PXB), PMM, K8s Operators, Valkey, Toolkit"
@@ -420,10 +420,11 @@ async function main() {
       }
       if (demoToken) {
         try {
+          const demoPrompt = await buildSystemPrompt(env, { excludePerconaDk: true })
           let demoSettings = await api("GET", "/api/v1/users/user/settings", null, demoToken) || {}
           demoSettings.tool_ids = toolServerIdsNoDK
           if (!demoSettings.ui) demoSettings.ui = {}
-          demoSettings.ui.system = sysPrompt
+          demoSettings.ui.system = demoPrompt
           await api("POST", "/api/v1/users/user/settings/update", demoSettings, demoToken)
           log("\u2713", `Demo account ready: ${DEMO_EMAIL} (no Percona-DK tools)`)
         } catch (e) {
