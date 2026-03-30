@@ -231,6 +231,30 @@ function checkDeps() {
   // uv (installs if needed — handles Python automatically)
   const hasUV = installUV()
 
+  // Fix ~/.cache ownership if it exists and is not writable (common after sudo brew, etc.)
+  if (hasUV && !isWin) {
+    const cacheDir = path.join(home, ".cache")
+    try {
+      fs.mkdirSync(path.join(cacheDir, "uv"), { recursive: true })
+      // Test write access
+      const testFile = path.join(cacheDir, "uv", ".ibex-write-test")
+      fs.writeFileSync(testFile, "")
+      fs.unlinkSync(testFile)
+    } catch (e) {
+      if (e.code === "EACCES") {
+        warn("~/.cache has wrong permissions (probably from a previous sudo command)")
+        console.log(`  Fixing with: sudo chown -R $(whoami) ~/.cache\n`)
+        try {
+          execSync(`sudo chown -R $(whoami) "${cacheDir}"`, { stdio: "inherit", shell: true })
+          ok("Fixed ~/.cache permissions")
+        } catch {
+          fail("Could not fix ~/.cache permissions. Run manually: sudo chown -R $(whoami) ~/.cache")
+          process.exit(1)
+        }
+      }
+    }
+  }
+
   console.log("")
   return { hasUV }
 }
