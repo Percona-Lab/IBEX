@@ -377,6 +377,8 @@ async function cloneAndInstall(targetDir) {
   // Pin to stable version — override with IBEX_VERSION env var
   const ibexVersion = process.env.IBEX_VERSION || "v0.9-beta"
 
+  let needsClone = false
+
   if (fs.existsSync(path.join(targetDir, "package.json"))) {
     try {
       const pkg = JSON.parse(fs.readFileSync(path.join(targetDir, "package.json"), "utf-8"))
@@ -386,17 +388,50 @@ async function cloneAndInstall(targetDir) {
         console.log(`    Your credentials and settings in ~/.ibex-mcp.env are not affected.${C.reset}`)
         const update = await confirm("Update?", true)
         if (update) {
-          run("git fetch --tags", { cwd: targetDir })
-          run(`git checkout ${ibexVersion}`, { cwd: targetDir })
-          ok(`Updated to ${ibexVersion}`)
+          try {
+            run("git fetch --tags", { cwd: targetDir })
+            run(`git checkout ${ibexVersion}`, { cwd: targetDir })
+            ok(`Updated to ${ibexVersion}`)
+          } catch (e) {
+            warn(`Update failed: ${e.message}`)
+            const nuke = await confirm("Remove existing install and do a fresh setup? (credentials are preserved)", true)
+            if (nuke) {
+              fs.rmSync(targetDir, { recursive: true, force: true })
+              needsClone = true
+            } else {
+              fail(`Please resolve git issues in ${targetDir} and re-run the installer.`)
+              process.exit(1)
+            }
+          }
         } else {
           ok("Keeping current version")
         }
       }
-    } catch {}
+    } catch (e) {
+      // package.json exists but is not IBEX or is unreadable — treat as needing fresh clone
+      warn(`Existing directory is not a valid IBEX install: ${e.message}`)
+      const nuke = await confirm(`Remove ${targetDir} and do a fresh install? (credentials are preserved)`, true)
+      if (nuke) {
+        fs.rmSync(targetDir, { recursive: true, force: true })
+        needsClone = true
+      } else {
+        fail(`Please remove or fix ${targetDir} and re-run the installer.`)
+        process.exit(1)
+      }
+    }
   } else {
+    needsClone = true
+  }
+
+  if (needsClone) {
     ok("Cloning IBEX repository...")
     run(`git clone --branch ${ibexVersion} https://github.com/Percona-Lab/IBEX.git "${targetDir}"`)
+  }
+
+  // Verify critical files exist after clone or update
+  if (!fs.existsSync(path.join(targetDir, "start-ibex.cjs"))) {
+    fail(`start-ibex.cjs not found in ${targetDir} — install appears broken.`)
+    process.exit(1)
   }
 
   ok("Installing npm dependencies...")
