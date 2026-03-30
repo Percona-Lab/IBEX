@@ -198,7 +198,8 @@ async function buildSystemPrompt(env, { excludePerconaDk = false } = {}) {
   }
 
   prompt += "\n\nInstructions:"
-  prompt += "\n- When the user asks about their work data, ALWAYS use the relevant tool. Never guess."
+  prompt += "\n- When the user asks about their work data, ALWAYS use the relevant tool."
+  prompt += "\n- If no tool is available for the user's question, answer from your own knowledge. Do your best even if uncertain."
   prompt += '\n- When the user says "my" messages/tickets/etc, filter for the current user.'
   prompt += "\n- When the user mentions their writing style, preferences, or tone, ALWAYS check memory first (context/preferences.md)."
   prompt += "\n- CRITICAL: When you retrieve information from tools or memory, use the EXACT data returned. Do NOT paraphrase, invent, or substitute commands, URLs, or steps. Quote the actual content."
