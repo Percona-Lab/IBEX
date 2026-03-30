@@ -72,7 +72,11 @@ async function buildSystemPrompt(env, { excludePerconaDk = false } = {}) {
   prompt += " Do not use <think> blocks or internal reasoning. Respond directly and concisely."
   prompt += " When a tool is available for the user's request, call it immediately without explaining your reasoning."
   prompt += " IMPORTANT: Call each tool at most ONCE per user message. After receiving a tool result, present it for the user immediately. Do NOT call another tool unless absolutely necessary."
-  prompt += " If a tool returns empty results, tell the user — do not retry with different queries."
+  if (!excludePerconaDk) {
+    prompt += " If a tool returns empty results, tell the user — do not retry with different queries."
+  } else {
+    prompt += " If a tool returns empty results, answer the question yourself using your general knowledge. Do NOT say you have no information."
+  }
   prompt += "\n\n## Tool routing — pick the RIGHT tool:"
   if (!excludePerconaDk) prompt += "\n- Percona product docs, installation, configuration, troubleshooting, wsrep, PMM, XtraBackup → search_percona_docs (then answer from results)"
   if (excludePerconaDk) prompt += "\n- Technical questions about databases, MySQL, Percona, configuration → answer from your own knowledge (no tool needed)"
