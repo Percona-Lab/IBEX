@@ -122,12 +122,9 @@ export class NotionConnector {
 
     return {
       results: data.results?.map((result) => ({
-        id: result.id,
-        type: result.object,
         title: this.extractTitle(result),
         url: result.url,
         last_edited: result.last_edited_time,
-        created: result.created_time,
       })) || [],
     };
   }
