@@ -214,7 +214,7 @@ class Supervisor {
       cwd: opts.cwd || IBEX_DIR,
       stdio: opts.stdio || "ignore",
       env: opts.env || process.env,
-      // NOT detached — child dies when parent dies
+      detached: !isWin,  // Create process group so we can kill the whole tree
     })
 
     const entry = this.children.get(name) || { restarts: 0, lastStart: 0 }
@@ -266,13 +266,13 @@ class Supervisor {
     console.log(`\n  ${C.yellow}Shutting down IBEX...${C.reset}`)
 
     for (const [name, entry] of this.children) {
-      if (entry.proc && !entry.proc.killed) {
+      if (entry.proc && entry.proc.pid) {
         try {
           if (isWin) {
-            // Windows: taskkill the process tree
             try { execSync(`taskkill /PID ${entry.proc.pid} /T /F`, { stdio: "ignore" }) } catch {}
           } else {
-            entry.proc.kill("SIGTERM")
+            // Kill the entire process group (negative PID)
+            process.kill(-entry.proc.pid, "SIGTERM")
           }
           ok(`Stopped ${name}`)
         } catch {}
@@ -286,11 +286,17 @@ class Supervisor {
       execSync(`"${cb}" stop`, { stdio: "ignore" })
     } catch {}
 
-    // Give children a moment to exit, then force-kill
+    // Give children a moment to exit, then force-kill entire process groups
     setTimeout(() => {
       for (const [name, entry] of this.children) {
-        if (entry.proc && !entry.proc.killed) {
-          try { entry.proc.kill("SIGKILL") } catch {}
+        if (entry.proc && entry.proc.pid) {
+          try {
+            if (isWin) {
+              try { execSync(`taskkill /PID ${entry.proc.pid} /T /F`, { stdio: "ignore" }) } catch {}
+            } else {
+              process.kill(-entry.proc.pid, "SIGKILL")
+            }
+          } catch {}
         }
       }
       process.exit(0)
@@ -381,6 +387,22 @@ ${C.bold}============================================================
   // Track which servers are active for MCPO config
   const activeMcpServers = []
   const nodeBin = process.execPath  // full path to node, safe for launchd
+
+  // Kill any orphaned processes holding our ports (prevents crash-loop after unclean shutdown)
+  if (!isWin) {
+    const portsToClean = [8080, 8010]  // Open WebUI, MCPO
+    for (const s of servers) {
+      if (env[s.key]) portsToClean.push(s.port)
+    }
+    for (const port of portsToClean) {
+      try {
+        const out = execSync(`lsof -ti TCP:${port} -sTCP:LISTEN`, { encoding: "utf-8" }).trim()
+        for (const pid of out.split("\n").filter(Boolean)) {
+          try { process.kill(Number(pid), "SIGKILL"); warn(`Killed orphaned process ${pid} on port ${port}`) } catch {}
+        }
+      } catch {}  // No process on port — normal
+    }
+  }
 
   for (const s of servers) {
     if (env[s.key]) {
